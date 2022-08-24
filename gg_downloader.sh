@@ -23,7 +23,7 @@ reset=$(tput sgr0)
 ## Dependency checks
 # cURL 
 if ! command -v curl >/dev/null 2>&1; then
-    echo ${red}"cURL in not installed."${reset} 
+	echo ${red}"cURL in not installed."${reset} 
 	echo ${red}"sudo apt install curl"${reset} 
 	exit
 fi
@@ -48,7 +48,7 @@ AUTH_TEST=$(curl -s -o /dev/null -w "%{http_code}" -u "$USERNAME:$PASSWORD" $CDN
 if [ "$AUTH_TEST" != "200" ]; then
 	echo ${red}"Error: Authorization failed."${reset}
 	echo ${red}"Error: Webserver status code $AUTH_TEST returned."${reset}
-	echo ${red}"Reason: Please check that your supplied username and password is valid and not expired. If it is, cdn.gog-games.com may possibly be down."${reset}
+	echo ${red}"Reason(s): Please check that your supplied username and password is valid and not expired. If it is, cdn.gog-games.com may possibly be down."${reset}
 	echo ${red}"Exiting."${reset}
 	exit 
 fi 
