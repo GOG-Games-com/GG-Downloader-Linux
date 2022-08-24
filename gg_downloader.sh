@@ -36,8 +36,8 @@ fi
 
 # Make sure input is not empty
 if [  -z "$GAME_SLUG" ]; then
-	echo ${red}"Please supply a game slug."${reset}
-	echo ${red}"Exiting."${reset}
+	echo ${red}"Error: Please supply a game slug."${reset}
+	echo ${red}"Status: Exiting."${reset}
 	exit
 fi 
 
@@ -46,9 +46,9 @@ GAME_FILES=$(curl -s "$GG_BASE_URL/game/$GAME_SLUG" | grep -Po '(<span class=\"f
 
 # Make sure have file names before proceeding
 if [ -z "$GAME_FILES" ]; then
-	echo ${red}"No filenames were fetched from the game page."${reset}
-	echo ${red}"Please check your supplied game slug is valid, no filenames may also not listed on the game page or possibly connection to the website could not be made. "${reset}
-	echo ${red}"Exiting."${reset}
+	echo ${red}"Error: No filenames were fetched from the game page."${reset}
+	echo ${red}"Reason(s): Please check your supplied game slug is valid, no filenames may not listed on the game page or possibly a connection to the website could not be made. "${reset}
+	echo ${red}"Status: Exiting."${reset}
 	exit 
 fi 
 
