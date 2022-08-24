@@ -22,20 +22,20 @@ reset=$(tput sgr0)
 ## Dependency checks
 # cURL 
 if ! command -v curl >/dev/null 2>&1; then
-    echo ${red}"cURL in not installed."${reset} 
-    echo ${red}"sudo apt install curl"${reset} 
-    exit
+	echo ${red}"cURL in not installed."${reset} 
+	echo ${red}"sudo apt install curl"${reset} 
+	exit
 fi
 
 # aria2 
 if ! command -v aria2c >/dev/null 2>&1; then
-    echo ${red}"aria2 in not installed."${reset}
-    echo ${red}"sudo apt install aria2"${reset}
-    exit
+	echo ${red}"aria2 in not installed."${reset}
+	echo ${red}"sudo apt install aria2"${reset}
+	exit
 fi
 
 # Make sure input is not empty
-if [  -z "$GAME_SLUG" ]; then
+if [ -z "$GAME_SLUG" ]; then
 	echo ${red}"Error: Please supply a game slug."${reset}
 	echo ${red}"Status: Exiting."${reset}
 	exit
