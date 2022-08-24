@@ -43,6 +43,7 @@ if [  -z "$GAME_SLUG" ]; then
 fi 
 
 # Check if credentials are valid
+# TODO Probably make a bogus endpoint/file like /auth/authorize
 AUTH_TEST=$(curl -s -o /dev/null -w "%{http_code}" -u "$USERNAME:$PASSWORD" $CDN_BASE_URL/sfv/fallout_classic.sfv)
 
 if [ "$AUTH_TEST" != "200" ]; then
