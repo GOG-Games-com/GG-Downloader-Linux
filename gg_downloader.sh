@@ -53,7 +53,6 @@ if [ -z "$GAME_FILES" ]; then
 fi 
 
 # Loop through and download each file
-
 while IFS= read -r file; do
 	echo ${green}"Downloading.. $file"${reset} 
 	aria2c --http-auth-challenge=true --http-user="$USERNAME" --http-passwd="$PASSWORD" -x "$DOWNLOAD_THREADS" -d "$DOWNLOAD_DIRECTORY/$GAME_SLUG" "$CDN_BASE_URL/downloads/$GAME_SLUG/$file"
