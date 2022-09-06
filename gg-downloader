@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 # -*- coding: utf-8 -*- vim: et noet ci pi sts=0 sw=4 ts=4
 {
 # TODO: Wider testing
 
-abort() {
+function abort() {
 exec 2>/dev/null
 printf -- '\n'
 exec >/dev/null
@@ -11,21 +11,21 @@ exit 130
 }
 
 trap -- 'abort' INT
-set -u
+set +H -u
 
-echo() {
+exec {sleep_fd}<> <(:)
+function sleep() {
+read -t "${1:-"0"}" -r -u "${sleep_fd}"
+}
+
+function echo() {
 printf -- '%s\n' "${@}"
 }
 
-echon() {
-printf -- '%s' "${@}"
-}
-
-askauth() {
+function askauth() {
 case "${user:-""}" in
 	"")
-		echon "Username: " 1>&2
-		if ! read -r "user"; then return 1; fi
+		if ! read -p "Username: " -r "user"; then return 1; fi
 		case "${user:-""}" in
 			"")
 				echo_err "auth: No username provided"
@@ -37,8 +37,8 @@ case "${user:-""}" in
 esac
 case "${pass:-""}" in
 	"")
-		echon "Password: " 1>&2
-		if ! read -r "pass"; then return 1; fi
+		if ! read -p "Password: " -r -s "pass"; then echo; return 1; fi
+		echo
 		case "${pass:-""}" in
 			"")
 				echo_err "auth: No password provided"
@@ -50,13 +50,13 @@ case "${pass:-""}" in
 esac
 }
 
-echoauth() {
+function echoauth() {
 if sslchk "${1:-""}"; then
 	printf -- '%s' "-u ${user}:${pass}"
 fi
 }
 
-echo_err() {
+function echo_err() {
 case "${2:-""}" in
 	"")	printf -- '%s\n' "${name}: ${1:-"FAILED"}" 1>&2;;
 	*)	printf -- '%s\n' "${name}: ${1:-"Unknown"}: ${2:-""}" 1>&2;;
@@ -64,14 +64,14 @@ esac
 code=1
 }
 
-mkconf() {
-if ! [ -d "${conf_dir}" ]; then
+function mkconf() {
+if ! [[ -d "${conf_dir}" ]]; then
 	if ! mkdir -p -- "${conf_dir}"; then
 		echo_err "${conf_dir}" "Failed to make the config directory"
 		exit 1
 	fi
 fi
-if ! [ -e "${conf}" ]; then
+if ! [[ -e "${conf}" ]]; then
 	if touch -- "${conf}" "${conf_aria2}"; then
 		if ! mkconf_sec_set; then exit 1; fi
 	else
@@ -82,8 +82,8 @@ fi
 mkconf_sec
 }
 
-mkconf_sec_set() {
-if chown "${USER}:${USER}" -- "${2:-"${conf}"}"; then
+function mkconf_sec_set() {
+if chown "${UID}:${GROUPS[0]}" -- "${2:-"${conf}"}"; then
 	if ! chmod "${1:-"0600"}" -- "${2:-"${conf}"}"; then
 		echo_err "${1}" "Cannot to set config${3:-" file"} permissions"
 		return 1
@@ -94,13 +94,13 @@ else
 fi
 }
 
-mkconf_sec() {
+function mkconf_sec() {
 local "i"
-if ! [ -s "${conf}" ]; then
+if ! [[ -s "${conf}" ]]; then
 	if ! askauth; then exit 1; fi
 fi
-if [ -e "${conf}" ]; then
-	i=$( cat -- "${conf}" 2>/dev/null )
+if [[ -e "${conf}" ]]; then
+	i=$( < "${conf}" )
 	case "${i}" in
 		""|":") if ! askauth; then exit 1; fi;;
 	esac
@@ -119,10 +119,8 @@ case "${i:-"x"}" in
 			fi
 			if mkconf_sec_set "0600" "${conf_aria2}" " file (aria2c)"; then
 				printf -- '%s\n' "http-user=${user}" "http-passwd=${pass}" > "${conf_aria2}"
-			else
-				exit 1
+				return 0
 			fi
-			return 0
 		else
 			exit 1
 		fi
@@ -130,16 +128,15 @@ case "${i:-"x"}" in
 esac
 }
 
-auth_zero() {
+function auth_zero() {
 local "i"
-if [ -s "${conf}" ]; then
-	echon "Are you sure? [y/n] " 1>&2
-	if ! read -r "i"; then exit 1; fi
+if [[ -s "${conf}" ]]; then
+	if ! read -p "Are you sure? (y/N) " -r "i"; then exit 1; fi
 	case "${i:-""}" in
 		[yY][eE][sS]|[yY]) :;; *) exit 1;;
 	esac
 	if ! rm -- "${conf}"; then code=1; fi
-	if [ -s "${conf_aria2}" ]; then
+	if [[ -s "${conf_aria2}" ]]; then
 		if ! rm -- "${conf_aria2}"; then code=1; fi
 	fi
 else
@@ -156,15 +153,15 @@ esac
 exit 1
 }
 
-authset() {
+function authset() {
 local "i"
 case "${user:-":"}:${pass:-":"}" in
 	":::") :;;
 	*"::"*) show_help 1 1>&2;;
 	*?":"?*) return 0;;
 esac
-if [ -s "${conf}" ]; then
-	i=$( cat -- "${conf}" 2>/dev/null )
+if [[ -s "${conf}" ]]; then
+	i=$( < "${conf}" )
 	user="${i%%":"*}"
 	pass="${i#*":"}"
 else
@@ -173,7 +170,7 @@ else
 fi
 }
 
-sslchk() {
+function sslchk() {
 case "${1:-"${cdn:-""}"}" in
 	"https://"?*) return 0;;
 	*)
@@ -183,12 +180,20 @@ case "${1:-"${cdn:-""}"}" in
 esac
 }
 
-lsget() {
+function lsget_grep() {
+local "i"
+while read -r i; do
+	case "${i}" in
+		*"${m%%"|"*}"*|*"${m##*"|"}"*) echo "${i}";;
+	esac
+done
+}
+
+function lsget() {
 local "m" "i" "old_i" "type" "no_repeat"
 no_repeat=""
 m='<span class="filename">|<div class="title">'
-curl --tlsv1.3 --user-agent "${agent}" --referer "${ref}" --silent --output - -- "${1}" \
-| grep -E -- "${m}" | while read -r i; do
+while read -r i; do
 	i="${i%"</span>"*}"
 	i="${i%%" Included</div>"*}"
 	i="${i##*">"}"
@@ -197,7 +202,7 @@ curl --tlsv1.3 --user-agent "${agent}" --referer "${ref}" --silent --output - --
 		"${gg_i}"|"${gg_g}") type="downloads"; continue;;
 		"${gg_p}") type="patches"; continue;;
 		"${old_i:-"@@@"}") continue;;
-		*";"*) i=$( echo "${i}" | sed "s/\&#039;/'/g; s/\&amp;/\&/g" );;
+		*";"*) i="${i//"&#039;"/"'"}"; i="${i//"&amp;"/"&"}";;
 	esac
 	case "${type:-"downloads"}|${i}" in
 		"patches|"[pP][aA][tT][cC][hH]"_"*"."[eE][xX][eE]|"patches|"[pP][aA][tT][cC][hH]"_"*"."[bB][iI][nN])
@@ -214,11 +219,11 @@ curl --tlsv1.3 --user-agent "${agent}" --referer "${ref}" --silent --output - --
 		;;
 	esac
 	old_i="${i}"
-done
+done < <( curl --tlsv1.3 --user-agent "${agent}" --referer "${ref}" --silent --output - -- "${1}" | lsget_grep )
 echo "END"
 }
 
-cdget_set_meta() {
+function cdget_set_meta() {
 local "meta"
 meta=$( echoauth "${1:-"http://example.com"}" | curl --tlsv1.3 -A "${agent}" -I -s -K- -- "${1:-""}" 2>&1 )
 case "${meta}" in
@@ -249,26 +254,26 @@ date="${date%%?"
 date=$( date -d "${date}" -- "+%Y%m%d%H%M.%S" 2>/dev/null )
 }
 
-cdget_no_space() {
+function cdget_no_space() {
 local "free"
 free=$( df --block-size=1 --output=avail -- "${PWD}" 2>/dev/null )
 free="${free##*"Avail"?}"
 free=$(( free - 33554432 ))
-if [ "${free}" -lt "${size:-"0"}" ]; then
+if [[ "${free}" -lt "${size:-"0"}" ]]; then
 	echo "${1:-"unknown"}: No free space to download"
 	echo "${1##*"/"}: FAILED"
 	return 1
 fi
 }
 
-cdnget_local_sfv() {
+function cdnget_local_sfv() {
 local "date" "size" "i"
 case "${global_path:-""}" in "") return 1;; esac
 if cdget_set_meta "${cdn}/sfv/${global_path%"/"}.sfv" 2>/dev/null; then
 	local_sfv=$(
-			echoauth | curl --tlsv1.3 -A "${agent}" -s -K- -- "${cdn}/sfv/${global_path%"/"}.sfv" | while read -r i; do
+			while read -r i; do
 				echo "${global_path}${i}"
-			done
+			done < <( echoauth | curl --tlsv1.3 -A "${agent}" -s -K- -- "${cdn}/sfv/${global_path%"/"}.sfv" )
 		)
 	case "${local_sfv}" in
 		*?"/"?*"  "????????*) return 0;;
@@ -279,15 +284,15 @@ else
 fi
 }
 
-cdnget() {
-local "date" "size" "final_size" "c" "file" "local_sfv"
+function cdnget() {
+local "date" "size" "final_size" "c" "file" "local_sfv" "skip_sfv"
 c=0
 file="${cdnget_path:-""}${1##*"/"}"
-if [ -s "${file}" ]; then
+if [[ -s "${file}" ]]; then
 	return 0
 fi
 if sslchk "${1:-"http://example.com"}"; then
-	if ! [ -s "${conf_aria2}" ]; then
+	if ! [[ -s "${conf_aria2}" ]]; then
 		opt_www="curl"
 	fi
 	cdget_set_meta "${1}"
@@ -296,7 +301,7 @@ if sslchk "${1:-"http://example.com"}"; then
 	( echo_err "downloading" "${file}"; )
 	case "${opt_www:-"curl"}" in
 		"curl")
-			if [ -e "${file}.part.aria2" ]; then
+			if [[ -e "${file}.part.aria2" ]]; then
 				rm -f -- "${file}.part" "${file}.part.aria2" 2>/dev/null
 			fi
 			until echoauth "${1:-"http://example.com"}" | curl --tlsv1.3 -C- -K- --connect-timeout 60 --user-agent "${agent}" --referer "${ref}" --progress-bar --output "${file}.part" -- "${1}" 1>&2; do :; done
@@ -312,9 +317,9 @@ if sslchk "${1:-"http://example.com"}"; then
 else
 	return 1
 fi
-until ! [ -e "${file}.aria2" ]; do
+until ! [[ -e "${file}.aria2" ]]; do
 	sleep 1
-	c=$(( c + 1 ))
+	(( c++))
 	case "${c:-"0"}" in 10) break;; esac
 done
 case "${size:-"0"}" in
@@ -329,22 +334,37 @@ case "${size:-"0"}" in
 				case "${opt_crc:-"0"}|${file}" in
 					1"|"?*"."[sS][fF][vV]) :;;
 					1"|"?*)
-						final_sfv=$( process_make_crc "${file}" )
-						case "${file}" in
-							*"/"*) :;;
-							*) final_sfv="${global_path:-"?/"}${final_sfv}"
-						esac
-						case "${local_sfv:-"${global_sfv:-"${final_sfv%"  "*}"}"}" in
-							*"${final_sfv%"  "*}"*)
-								case "${local_sfv:-"${global_sfv:-"${final_sfv}"}"}" in
-									*"${final_sfv}"*) :;;
-									*)
-										echo_err "${file}" "CRC32 checksum does not match"
+							case "${opt_pe32:-"0"}" in
+								0) :;;
+								1"|"?*"."[eE][xX][eE])
+									skip_sfv=1
+									if ! process_exe_pe "${file}"; then
+										echo_err "${file}" "PE checksum does not match"
 										echo "${file}: FAILED"; return 1
-									;;
-								esac
-							;;
-						esac
+									fi
+								;;
+							esac
+							case "${skip_sfv:-"0"}" in
+								1) unset -- "skip_sfv";;
+								*)
+									final_sfv=$( process_make_crc "${file}" )
+									case "${file}" in
+										*"/"*) :;;
+										*) final_sfv="${global_path:-"?/"}${final_sfv}"
+									esac
+									case "${local_sfv:-"${global_sfv:-"${final_sfv%"  "*}"}"}" in
+										*"${final_sfv%"  "*}"*)
+											case "${local_sfv:-"${global_sfv:-"${final_sfv}"}"}" in
+												*"${final_sfv}"*) :;;
+													*)
+													echo_err "${file}" "CRC32 checksum does not match"
+													echo "${file}: FAILED"; return 1
+												;;
+											esac
+										;;
+									esac
+								;;
+							esac
 					;;
 				esac
 				case "${opt_ggchk:-"0"}" in
@@ -371,7 +391,7 @@ esac
 return 0
 }
 
-logchk() {
+function logchk() {
 local "i"
 if type "nslookup" >/dev/null; then
 	i=$( nslookup "${cdn#*"//"}" "1.1.1.1" 2>/dev/null )
@@ -381,47 +401,58 @@ if type "nslookup" >/dev/null; then
 		*) echo_err "auth" "No Internet connection"; return 1;;
 	esac
 fi
-i=$( echoauth | curl --tlsv1.3 -A "${agent}" -I -s -w "########%{http_code}" -K- -- "${cdn}/sfv/fallout_classic.sfv" )
+i=$( echoauth | curl --tlsv1.3 -A "${agent}" -I -s -w "########%{http_code}" -K- -- "${cdn}/auth/authorize" )
 case "${i:-""}" in
-	*"########200") return 0;;
+	*"########200"|*"########404")
+		case "${opt_chk_auth:-"0"}" in
+			1) echo_err "auth: Successful log-in"; exit 0;;
+			*) return 0;;
+		esac
+	;;
 	*"########401") echo_err "auth" "Incorrect username/password"; return 1;;
+	*"########403") echo_err "auth" "Cannot find the log-in page on ${gg_name} CDN"; return 1;;
+	*"########503") echo_err "auth" "Multiple log-ins are not allowed"; return 1;;
+	*"########521") echo_err "auth" "${gg_name} CDN is offline"; print_notice; return 1;;
 	*) echo_err "auth" "Cannot contact ${gg_name} CDN"; return 1;;
 esac
 }
 
-pkgchk() {
-if type "aria2c" >/dev/null 2>&1; then
+function pkgchk() {
+if type "aria2c" &>/dev/null; then
 	opt_www="aria2c"
 else
 	opt_www="curl"
 fi
-if ! type "b2sum" "${@}" "${opt_www:-"curl"}" >/dev/null 2>&1; then
+if ! type "b2sum" "${@}" "${opt_www:-"curl"}" &>/dev/null; then
 	printf -- '%s\n' "${name}: please install: coreutils ${*}" 1>&2
 	exit 1
 fi
-if type "7z" "tar" >/dev/null 2>&1; then
+if type "7z" "tar" &>/dev/null; then
 	opt_crc=1
 fi
-if type "ggchk" >/dev/null 2>&1; then
+if type "ggchk" &>/dev/null; then
 	opt_ggchk=1
 fi
-if type "setfattr" >/dev/null 2>&1; then
+if type "setfattr" &>/dev/null; then
 	opt_xattr=1
+fi
+if type "python3" &>/dev/null; then
+	opt_pe32=1
 fi
 }
 
-rmslash_arg() {
+function rmslash_arg() {
 case "${arg:-""}" in
 	*"/")
-		arg="${arg%"/"}"
+		arg="${arg/%"/"}"
 	;;
 esac
 }
 
-is_gg() {
+function is_gg() {
 case "${1}" in
-	"${www}/game/"?*"/"*"/"*|"${cdn}/"?*"/"?*)
-		return 0
+	"${www}/game/"?*"/"?*|"${cdn}/sfv/"?*"/"?*|"${cdn}/"?*"/"?*"/"?*"/"?*)
+		return 1
 	;;
 	"${www}/game/"?*|"${cdn}/sfv/"?*|"${cdn}/"?*"/"?*"/"?*) return 0;;
 	"${www}/"?*|"${cdn}/"?*)
@@ -441,27 +472,34 @@ case "${1}" in
 		return 1
 	;;
 esac
-
-if echo "${1}" | grep -E -- '^[0-9]$|^10$|^[0-9]{10}$' >/dev/null 2>&1; then
-	echo_err "${1}" "GOG IDs are not supported"
-	return 1
-elif echo "${1}" | grep -E -- '^[0-9a-z\-_]+$' >/dev/null 2>&1; then
-	arg="${www}/game/${1}"
-	return 0
-else
-	echo_err "${1}" "Is not ${gg_name}"
-	return 1
-fi
+case "${1}" in
+	[0123456789]|10|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])
+		echo_err "${1}" "GOG IDs are not supported"
+		return 1
+	;;
+	[0-9a-z]*)
+		case "${1}" in
+			"${1//[^0-9a-z\-_]}")
+				arg="${www}/game/${1}"
+				return 0
+			;;
+		esac
+	;;
+	*)
+		echo_err "${1}" "Is not ${gg_name}"
+		return 1
+	;;
+esac
 return 1
 }
 
-is_file() {
+function is_file() {
 case "${1:-""}" in
 	*)
-		if [ -d "${1}" ]; then
+		if [[ -d "${1}" ]]; then
 			echo_err "${1}" "Is a directory"
-		elif [ -e "${1}" ]; then
-			if [ -r "${1}" ]; then
+		elif [[ -e "${1}" ]]; then
+			if [[ -r "${1}" ]]; then
 				return 0
 			else
 				echo_err "${1}" "Permission denied"
@@ -474,7 +512,7 @@ esac
 return 1
 }
 
-show_help() {
+function show_help() {
 printf -- '%s\n' "Usage: ${name:-"${0##*"/"}"} [OPTION]... [URL/SLUG]...
 Download files from ${gg_name} CDN.
 
@@ -482,13 +520,16 @@ Download files from ${gg_name} CDN.
   -p [PASSWORD]  set your ${gg_name} CDN password
       --reset    reset username/password config
   -w [ADDRESS]   set the ${gg_name} address
-      --no-dir   do not put files in a subdirectory
+  -a, --auth     check authentification and exit
+  -n, --no-dir   do not put files in a subdirectory
+  -l, --latest   list added/updated on ${gg_name} CDN
+  -L, --Latest   list slugs of added/updated on ${gg_name} CDN
   -s, --sfv      update offline SFV database
   -h, --help     display this help and exit"
 exit "${1:-"0"}"
 }
 
-process_slug() {
+function process_slug() {
 case "${1:-""}" in
 	"${cdn}/patches/"?*)
 		global_path=""
@@ -528,7 +569,7 @@ case "${1:-""}" in
 		case "${PWD##*"/"}/" in
 			"${cdnget_path}") unset -- "cdnget_path"; return 0;;
 		esac
-		if ! [ -d "${cdnget_path}" ]; then
+		if ! [[ -d "${cdnget_path}" ]]; then
 			if ! mkdir -p -- "${cdnget_path}"; then
 				echo_err "${1}" "FAILED"
 			fi
@@ -537,36 +578,36 @@ case "${1:-""}" in
 esac
 }
 
-process_list_ggchk() {
+function process_list_ggchk() {
 local "i"
 case "${opt_ggchk:-"0"}" in 0) return 0;; esac
 case "${list:-""}" in
 	"") echo_err "${gg_name}" "No filelist found"; code=1; return 1;;
 esac
-echo "${list}" | while read -r i; do
+while read -r i; do
 	case "${i}" in
 		"${gg_i}"|"${gg_p}"|"${gg_g}") continue;;
 		"END") return "${func_code:-"0"}";;
 	esac
 	if ! ggchk "${cdnget_path:-""}${i##*"/"}"; then func_code=1; fi
-done
+done < <( echo "${list}" )
 }
 
-process_list() {
+function process_list() {
 local "i"
 case "${list:-""}" in
 	"") echo_err "${gg_name}" "No filelist found"; code=1; return 1;;
 esac
-echo "${list}" | while read -r i; do
+while read -r i; do
 	case "${i}" in
 		"${gg_i}"|"${gg_p}"|"${gg_g}") continue;;
 		"END") return "${func_code:-"0"}";;
 	esac
 	if ! cdnget "${i}"; then func_code=1; fi
-done
+done < <( echo "${list}" )
 }
 
-process() {
+function process() {
 local "list" "cdnget_path" "global_path" "local_sfv"
 unset -- "arg"
 if process_slug "${1}"; then
@@ -606,75 +647,18 @@ else
 fi
 }
 
-process_make_crc_lowercase() {
-case "${1:-""}" in
-	[0-9]) echo "${1}";;
-	A) echo "a";; D) echo "d";;
-	B) echo "b";; E) echo "e";;
-	C) echo "c";; F) echo "f";;
-	*) return 1;;
-esac
-}
-
-process_make_crc() {
-local "i" "i_01" "i_02" "i_03" "i_04" "i_05" "i_06" "i_07" "i_08" "i_09" "i_10" "i_11" "i_12" "i_13" "i_14" "i_15" "i_16"
+function process_make_crc() {
+local "i"
 if ! i=$( 7z h -scrcCRC"${mode:-"32"}" -bb0 -bd -si -ba < "${1:-"/dev/stdin"}" 2>/dev/null ); then
 	return 1
 fi
 i="${i:-""}"
 i="${i%%" "*}"
-case "${mode:-"32"}" in
-	32)
-		i_01="${i%%???????}"
-		i_02="${i%%??????}"; i_02="${i_02##?}"
-		i_03="${i%%?????}"; i_03="${i_03##??}"
-		i_04="${i%%????}"; i_04="${i_04##???}"
-		i_05="${i%%???}"; i_05="${i_05##????}"
-		i_06="${i%%??}"; i_06="${i_06##?????}"
-		i_07="${i%%?}"; i_07="${i_07##??????}"
-		i_08="${i##???????}"
-		i=""
-	;;
-	64)
-		i_01="${i%%???????????????}"
-		i_02="${i%%??????????????}"; i_02="${i_02##?}"
-		i_03="${i%%?????????????}"; i_03="${i_03##??}"
-		i_04="${i%%????????????}"; i_04="${i_04##???}"
-		i_05="${i%%???????????}"; i_05="${i_05##????}"
-		i_06="${i%%??????????}"; i_06="${i_06##?????}"
-		i_07="${i%%?????????}"; i_07="${i_07##??????}"
-		i_08="${i%%????????}"; i_08="${i_08##???????}"
-		i_09="${i%%???????}"; i_09="${i_09##????????}"
-		i_10="${i%%??????}"; i_10="${i_10##?????????}"
-		i_11="${i%%?????}"; i_11="${i_11##??????????}"
-		i_12="${i%%????}"; i_12="${i_12##???????????}"
-		i_13="${i%%???}"; i_13="${i_13##????????????}"
-		i_14="${i%%??}"; i_14="${i_14##?????????????}"
-		i_15="${i%%?}"; i_15="${i_15##??????????????}"
-		i_16="${i##???????????????}"
-		i_09=$( process_make_crc_lowercase "${i_09}" )
-		i_10=$( process_make_crc_lowercase "${i_10}" )
-		i_11=$( process_make_crc_lowercase "${i_11}" )
-		i_12=$( process_make_crc_lowercase "${i_12}" )
-		i_13=$( process_make_crc_lowercase "${i_13}" )
-		i_14=$( process_make_crc_lowercase "${i_14}" )
-		i_15=$( process_make_crc_lowercase "${i_15}" )
-		i_16=$( process_make_crc_lowercase "${i_16}" )
-		i="${i_09}${i_10}${i_11}${i_12}${i_13}${i_14}${i_15}${i_16}"
-	;;
-esac
-i_01=$( process_make_crc_lowercase "${i_01}" )
-i_02=$( process_make_crc_lowercase "${i_02}" )
-i_03=$( process_make_crc_lowercase "${i_03}" )
-i_04=$( process_make_crc_lowercase "${i_04}" )
-i_05=$( process_make_crc_lowercase "${i_05}" )
-i_06=$( process_make_crc_lowercase "${i_06}" )
-i_07=$( process_make_crc_lowercase "${i_07}" )
-i_08=$( process_make_crc_lowercase "${i_08}" )
-echo "${1:-"-"}  ${i_01}${i_02}${i_03}${i_04}${i_05}${i_06}${i_07}${i_08}${i}"
+i="${i,,}"
+echo "${1:-"-"}  ${i}"
 }
 
-process_crc_main() {
+function process_crc_main() {
 case "${opt_crc:-"0"}" in
 	0)
 		printf -- '%s\n' "${name}: please install: 7z" 1>&2
@@ -691,23 +675,23 @@ done
 exit "${code:-"0"}"
 }
 
-sfvchk() {
+function sfvchk() {
 case "${opt_crc:-"0"}" in 0) return 0;; esac
-if [ -s "${conf_sfv}" ]; then
-	if ! gzip --test -- "${conf_sfv}" >/dev/null 2>&1; then
+if [[ -s "${conf_sfv}" ]]; then
+	if ! gzip --test -- "${conf_sfv}" &>/dev/null; then
 		rm -f -- "${conf_sfv}" 2>/dev/null
 	fi
 fi
 }
 
-sfv_to_ram() {
+function sfv_to_ram() {
 case "${opt_crc:-"0"}" in 0) return 0;; esac
-if [ -s "${conf_sfv}" ]; then
+if [[ -s "${conf_sfv}" ]]; then
 	global_sfv=$( tar -xf "${conf_sfv}" -O --wildcards --no-anchored '*.[sS][fF][vV]' )
 fi
 }
 
-sfvget() {
+function sfvget() {
 local "i"
 case "${opt_crc:-"0"}" in 0) return 0;; esac
 ( echo_err "downloading" "${conf_sfv##*"/"}"; )
@@ -726,7 +710,7 @@ if curl --tlsv1.3 --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_
 	case "${i%%"  "*}" in
 		"${sfv_base_sha:-""}")
 			if mkconf_sec_set "0600" "${conf_sfv}" " file (SFV)"; then
-				if gzip --test -- "${conf_sfv}" >/dev/null 2>&1; then
+				if gzip --test -- "${conf_sfv}" &>/dev/null; then
 					echo "${name}: ${conf_sfv##*"/"}: OK" 1>&2
 					return 0
 				else
@@ -748,7 +732,7 @@ if curl --tlsv1.3 --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_
 fi
 }
 
-set_auth_opt() {
+function set_auth_opt() {
 case "${OPT:-""}" in
 	u)
 		case "${OPTARG:-""}" in
@@ -769,7 +753,7 @@ case "${OPT:-""}" in
 esac
 }
 
-set_www_opt() {
+function set_www_opt() {
 case "${OPTARG:-""}" in
 	"") echo_err "CDN: No address provided"; exit 1;;
 	"-"*) show_help 1 1>&2;;
@@ -777,27 +761,27 @@ case "${OPTARG:-""}" in
 		www="${OPTARG}"
 		case "${www}" in
 			"ftp://"?*)
-				www="${www#"ftp://"}"
+				www="${www/#"ftp://"}"
 			;;
 			"ftps://"?*)
-				www="${www#"ftps://"}"
+				www="${www/#"ftps://"}"
 			;;
 			"sftp://"?*)
-				www="${www#"sftp://"}"
+				www="${www/#"sftp://"}"
 			;;
 			"http://"?*)
-				www="${www#"http://"}"
+				www="${www/#"http://"}"
 			;;
 			"https://"?*)
-				www="${www#"https://"}"
+				www="${www/#"https://"}"
 			;;
 		esac
 		case "${www}" in
 			"www."?*)
-				www="${www#"www."}"
+				www="${www/#"www."}"
 			;;
 			"cdn."?*)
-				www="${www#"cdn."}"
+				www="${www/#"cdn."}"
 			;;
 		esac
 		www="${www%%"/"*}"
@@ -806,8 +790,254 @@ esac
 cdn="https://cdn.${www#*"//"}"
 }
 
-main() {
-local "name" "gg_name" "gg_i" "gg_p" "gg_g" "www" "cdn" "conf_dir" "conf" "conf_aria2" "agent" "conf_sfv" "LANG" "LC_ALL" "OPTERR" "OPTIND" "OPT" "OPTARG" "opt_www" "opt_ggchk" "global_sfv" "arg" "code"
+function process_exe_pe() {
+local "pe_old" "pe" "script" "excl_pe"
+case "${1##*"/"}" in
+	"setup_colin2005.exe") excl_pe="27D82900";;
+	"setup_obscure.exe") excl_pe="E1D42200";;
+	"setup_republic_the_revolution.exe") excl_pe="801FFA2B";;
+	"setup_toca_3.exe") excl_pe="AA452800";;
+esac
+script="#!/usr/bin/env python3
+# -*- coding: utf-8 -*- vim: et noet ci pi sts=0 sw=4 ts=4
+
+from __future__ import print_function
+import sys
+sys.tracebacklimit = 0
+import os, io, argparse, re, struct
+from io import DEFAULT_BUFFER_SIZE as DEFAULT
+
+CODE = 0
+
+def pe_make(FILENAME):
+	SKIP = 344
+	PE = 0
+	READ = False
+	PE_OLD = str(\"00000000\")
+	with open(FILENAME, 'rb') as openfile:
+		while True:
+			DATA = openfile.read(DEFAULT)
+			LEFT = len(DATA) % 4
+			MAX = len(DATA) + ((4-LEFT) * ( LEFT != 0 ))
+			if not DATA:
+				break
+
+			for i in range( int(MAX / 4) ):
+				if READ == False:
+					if i == int(SKIP / 4):
+						READ = True
+						PE_OLD = DATA[344:348].hex().upper()
+						continue
+				if i+1 == (int(MAX / 4)) and LEFT:
+					line = struct.unpack('I', DATA[i*4:]+ (b'\0' * (4-LEFT)) )[0]
+				else:
+					line = struct.unpack('I', DATA[ i*4 : i*4+4 ])[0]
+				PE += line
+				if PE >= 2**32:
+					PE = (PE & 0xffffffff) + (PE >> 32)
+
+
+		PE = (PE & 0xffff) + (PE >> 16)
+		PE = (PE) + (PE >> 16)
+		PE = PE & 0xffff
+
+		PE = PE + os.path.getsize(FILENAME)
+		PE = '%08X' % (PE & 0xffffffff)
+		PE_HASH = PE[6:8] + PE[4:6] + PE[2:4] + PE[0:2]
+		return PE_HASH, PE_OLD
+
+if __name__ == '__main__':
+	try:
+		parser = argparse.ArgumentParser(
+				description='Check PE (32-bit) checksums of GOG installers.')
+
+		parser.add_argument('EXE', action='store', nargs='*')
+		args = parser.parse_args()
+
+		for ARG in args.EXE:
+			PE, PE_OLD = pe_make(ARG)
+			print(PE + \"=\" + PE_OLD)
+			if PE == PE_OLD:
+				sys.exit(0)
+			else:
+				sys.exit(1)
+
+	except KeyboardInterrupt:
+		sys.stderr.close()
+		print ('')
+		sys.stdout.close()
+		sys.exit(130)
+
+	except BrokenPipeError:
+		sys.stderr.close()
+		sys.stdout.close()
+		sys.exit(1)
+
+sys.exit(CODE)"
+pe=$( echo "${script}" | python3 -- "/dev/stdin" -- "${1:-"/dev/zero"}" )
+pe_old="${pe#*"="}"
+pe="${pe%"="*}"
+case "${excl_pe:-"${pe_old:-"x"}"}" in
+	"${pe:-"x"}") return 0;;
+	*) code=1; return 1;;
+esac
+}
+
+function print_notice_fetch_grep() {
+local "i" "i_on"
+while read -r i; do
+	case "${i}" in
+		*'<div id="notice">'*)
+		i_on=1
+		;;
+	esac
+	case "${i_on:-"0"}" in
+		1) echo "${i}";;
+	esac
+done
+}
+
+function print_notice_fetch() {
+local "i"
+while read -r i; do
+	case "${i}" in
+		"<div id=\"notice\">") continue;;
+		"<span class=\"txt-red\">"*) :;;
+		"</div>"|"<div class=\""*|"<form "*|"<button "*|"<h1>"*|"<a class="*)
+			break
+		;;
+	esac
+	while true; do
+		case "${i:-""}" in
+			"") return 1;;
+			"<"*) i="${i#*">"}";;
+			*"</"*) i="${i%"</"*}";;
+			?*) break;;
+			*) return 1;;
+		esac
+	done
+	i="${i//[^[:print:]]}"
+	i="${i//'"'/"'"}"
+	i="\"${i}\""
+	case "${i:-""}" in
+		"") return 1;;
+		*) echo "${i}";;
+	esac
+done < <( curl --tlsv1.3 --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}" 2>/dev/null | print_notice_fetch_grep )
+return 0
+}
+
+function print_notice() {
+local "i"
+if ! i=$( print_notice_fetch ); then return 1; fi
+case "${i:-""}" in
+	"") return 1;;
+	*)
+		echo_err "notice" "${i}"
+	;;
+esac
+}
+
+function print_latest_fetch_grep() {
+local "i" "i_on"
+while read -r i; do
+	case "${i}" in
+		*'<lastBuildDate>'*)
+		i_on=1
+		;;
+	esac
+	case "${i_on:-"0"}" in
+		1) echo "${i}";;
+	esac
+done
+}
+
+function print_latest_fetch() {
+local "i" "title" "date" "slug" "c"
+title=()
+date=()
+slug=()
+while read -r i; do
+	case "${i}" in
+		"<lastBuildDate>"?*|"<docs>"?*|"<media:"?*|"<enclosure "?*|"<guid "?*|"</item>"|"<item>") continue;;
+		"<title>"?*)
+			i="${i/#"<title>"}"
+			i="${i/%"</title>"}"
+			i="${i//"&#039;"/"'"}"
+			i="${i//"&amp;"/"&"}"
+			i="${i//'"'/"'"}"
+			title+=( "${i}" )
+		;;
+		"<pubDate>"?*)
+			i="${i/#"<pubDate>"}"
+			i="${i/%"</pubDate>"}"
+			case "${i}" in
+				[A-Z][a-z][a-z]" "[0-9]*","[0-9][0-9][0-9][0-9]" "[0-9][0-9]":"[0-9][0-9])
+					i="${i} GMT"
+				;;
+				[A-Z][a-z][a-z]" "[0-9]*","[0-9][0-9][0-9][0-9]" "[0-9][0-9]":"[0-9][0-9])
+					i="${i} GMT"
+				;;
+			esac
+			i=$( date -d "${i:-"now"}" -- "+%+4Y-%m-%d" 2>/dev/null )
+			date+=( "${i}" )
+		;;
+		"<link>"?*)
+			i="${i/#"<link>${www}/game/"}"
+			i="${i/%"</link>"}"
+			slug+=( "${i}" )
+		;;
+		"</channel>"|"</rss>")
+      		break
+		;;
+		*) continue;;
+	esac
+	while true; do
+		case "${i:-""}" in
+			"") return 1;;
+			"<"*) i="${i#*">"}";;
+			*"</"*) i="${i%"</"*}";;
+			?*) break;;
+			*) return 1;;
+		esac
+	done
+	i="${i//[^[:print:]]}"
+	case "${i:-""}" in
+		"")continue;;
+	esac
+done < <( curl --tlsv1.3 --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}/rss" 2>/dev/null | print_latest_fetch_grep )
+c=0
+if type tput &>/dev/null; then
+	m=$( tput lines 2>/dev/null )
+	((m--))
+fi
+for i in "${title[@]}"; do
+	case "${opt_slug:-"0"}" in
+		1) echo "${slug[$c]:-"unknown"}";;
+		*) echo "${date[$c]:-"Unknown"} \"${title[$c]:-"Unknown Title"}\"";;
+	esac
+	((c++))
+	case "${c:-"x"}" in
+		"${m:-"y"}") break;;
+	esac
+done
+return 0
+}
+
+function print_latest() {
+local "i"
+if ! i=$( print_latest_fetch ); then return 1; fi
+case "${i:-""}" in
+	"") return 1;;
+	*)
+		echo "${i}"
+	;;
+esac
+}
+
+
+function main() {
+local "name" "gg_name" "gg_i" "gg_p" "gg_g" "www" "cdn" "conf_dir" "conf" "conf_aria2" "agent" "conf_sfv" "LANG" "LC_ALL" "OPTERR" "OPTIND" "OPT" "OPTARG" "opt_www" "opt_ggchk" "opt_slug" "global_sfv" "arg" "code"
 LANG=C
 LC_ALL=C
 export "LANG" "LC_ALL"
@@ -843,14 +1073,17 @@ always_include=" patch_biomutant_1.3_(49718)_to_1.4_(51251).exe
  patch_slop_episode3_2.0.1.2.exe
  patch_the_guild2_pirates_2.0.1.5.exe
  patch_the_witcher_3_wild_hunt_-_game_of_the_year_edition_1.31_(A)_to_1.32.exe "
-pkgchk "grep" "curl" "sed" # "nslookup" "ggchk" "aria2c" "7z" "gzip" "tar" "xattr"
-while getopts ":-:p:u:w:h" "OPT"; do
+pkgchk "curl" # "python3" "nslookup" "ggchk" "aria2c" "7z" "gzip" "tar" "xattr"
+while getopts ":-:p:u:w:anlLh" "OPT"; do
 	case "${OPT}" in
 		-)
 			case "${OPTARG}" in
-				no-dir|no-directory|no-folder) opt_no_dir=1;;
+				a|auth|authentification) opt_chk_auth=1;;
+				n|no-dir|no-directory|no-folder) opt_no_dir=1;;
 				sfv) opt_sfv=1;;
 				reset) auth_zero;;
+				l|list|latest|list-latest|latest-list) print_latest_fetch;;
+				L|List|Latest|List-[lL]atest|Latest-[lL]ist) opt_slug=1; print_latest_fetch;;
 				h|help) show_help;;
 				*) show_help 1 1>&2;;
 			esac
@@ -858,6 +1091,10 @@ while getopts ":-:p:u:w:h" "OPT"; do
 		u) set_auth_opt;;
 		p) set_auth_opt;;
 		w) set_www_opt;;
+		a) opt_chk_auth=1;;
+		n) opt_no_dir=1;;
+		l) print_latest_fetch;;
+		L) opt_slug=1; print_latest_fetch;;
 		h) show_help;;
 		*) show_help 1 1>&2;;
 	esac
@@ -875,14 +1112,13 @@ sfvchk
 case "${opt_sfv:-"0"}" in
 	1) if ! sfvget; then exit 1; fi;;
 	*)
-		if ! [ -s "${conf_sfv}" ]; then
+		if ! [[ -s "${conf_sfv}" ]]; then
 			if ! sfvget; then exit 1; fi
 		fi
 	;;
 esac
 unset -- "sfv_base" "sfv_base_sha"
-case "${#}" in 0) exit 0;; esac
-sfv_to_ram
+case "${opt_chk_auth:-"0"},${#}" in 0,0) exit 0;; 0,*) sfv_to_ram;; esac
 authset; sslchk
 if ! logchk; then exit 1; fi
 for arg in "${@}"; do
