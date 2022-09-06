@@ -1,4 +1,4 @@
-# GG-Downloader (in developement)
+# GG-Downloader (in development)
 
 ## Usage
 ggcdn-indev [OPTION]... [URL/SLUG]...
