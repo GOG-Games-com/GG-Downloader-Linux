@@ -1,7 +1,7 @@
 # GG-Downloader
 
 ## Usage
-./gg-downloader [OPTION]... [URL/SLUG]...
+./gg-downloader [OPTION] [URL/SLUG]
 
 ***-u [USERNAME]*** set your username
 
