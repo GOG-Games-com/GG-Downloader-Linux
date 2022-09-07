@@ -1,4 +1,5 @@
 # GG-Downloader
+Download games via command line. Requires a cdn.gog-games.com username and password.
 
 ## Usage
 ./gg-downloader [OPTION] [URL/SLUG]
