@@ -1,6 +1,12 @@
 # GG-Downloader
 Download games via command line. Requires a cdn.gog-games.com username and password.
 
+## TL:DR I'm dumb
+1. Download and make executable: chmod +x gg-downloader
+2. Authenticate: ./gg-downloader -a
+3. Download: ./gg-downloader https://gog-games.com/game/arcade_paradise (replace url for another game)
+4. Entered wrong creds for auth? ./gg-downloader --reset
+
 ## Usage
 ./gg-downloader [OPTION] [URL/SLUG]
 
