@@ -205,27 +205,24 @@ while read -r i; do
 		*";"*) i="${i//"&#039;"/"'"}"; i="${i//"&amp;"/"&"}";;
 	esac
 	case "${type:-"downloads"}|${i}" in
-		"patches|"[pP][aA][tT][cC][hH]"_"*"."[eE][xX][eE]|"patches|"[pP][aA][tT][cC][hH]"_"*"."[bB][iI][nN])
-			case "${always_include}" in
-				*" ${i} "*) echo "${cdn}/${type:-"downloads"}/${ref##*"/"}/${i}";;
-				*) continue;;
-			esac
+		"downloads|setup_streets_of_rogue_v97_4_(64bit)_(58917).md5")
+			continue
 		;;
 		"downloads|"*)
 			echo "${cdn}/downloads/${ref##*"/"}/${i}"
 		;;
 		"patches|"*)
-			echo "${cdn}/patches/${i}"
+			continue
 		;;
 	esac
 	old_i="${i}"
-done < <( curl --tlsv1.3 --user-agent "${agent}" --referer "${ref}" --silent --output - -- "${1}" | lsget_grep )
+done < <( curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref}" --silent --output - -- "${1}" | lsget_grep )
 echo "END"
 }
 
 function cdget_set_meta() {
 local "meta"
-meta=$( echoauth "${1:-"http://example.com"}" | curl --tlsv1.3 -A "${agent}" -I -s -K- -- "${1:-""}" 2>&1 )
+meta=$( echoauth "${1:-"http://example.com"}" | curl --tlsv1."${opt_tlsv:-"2"}" -A "${agent}" -I -s -K- -- "${1:-""}" 2>&1 )
 case "${meta}" in
 	"HTTP/2 404"*)
 		echo_err "${1##*"/"}" "No such CDN file"
@@ -273,7 +270,7 @@ if cdget_set_meta "${cdn}/sfv/${global_path%"/"}.sfv" 2>/dev/null; then
 	local_sfv=$(
 			while read -r i; do
 				echo "${global_path}${i}"
-			done < <( echoauth | curl --tlsv1.3 -A "${agent}" -s -K- -- "${cdn}/sfv/${global_path%"/"}.sfv" )
+			done < <( echoauth | curl --tlsv1."${opt_tlsv:-"2"}" -A "${agent}" -s -K- -- "${cdn}/sfv/${global_path%"/"}.sfv" )
 		)
 	case "${local_sfv}" in
 		*?"/"?*"  "????????*) return 0;;
@@ -284,18 +281,149 @@ else
 fi
 }
 
+function quickfix_warn_or_solve() {
+local "i"
+case "${ref:-""}" in
+	"${cdn}/downloads/road_96/on_the_road_96 _documentary.zip") :;;
+	"${cdn}/downloads/bright_memory_infinite/setup_bright_memory_infinite_black_kitten_1.2_(59596).exe")
+		# Source: https://www.gogdb.org/product/1088118940#downloads
+		(
+			if [[ -d "bright_memory_infinite" ]]; then
+				if ! cd -- "bright_memory_infinite"; then
+					echo_err "${1}" "FAILED to rename"
+					return 1
+				fi
+			fi
+			if ! mv -- "setup_bright_memory_infinite_black_kitten_1.2_(59596).exe" "setup_bright_memory_infinite_black_kitten_dlc_1.2_(59596).exe"; then
+				echo_err "${1}" "FAILED to rename"
+				return 1
+			fi
+		)
+	;;
+	"${cdn}/downloads/bright_memory_infinite/setup_bright_memory_infinite_skinny_jeans_1.2_(59596).exe")
+		# Source: https://www.gogdb.org/product/1757262951#downloads
+		(
+			if [[ -d "bright_memory_infinite" ]]; then
+				if ! cd -- "bright_memory_infinite"; then
+					echo_err "${1}" "FAILED to rename"
+					return 1
+				fi
+			fi
+			if ! mv -- "setup_bright_memory_infinite_skinny_jeans_1.2_(59596).exe" "setup_bright_memory_infinite_skinny_jeans_dlc_1.2_(59596).exe"; then
+				echo_err "${1}" "FAILED to rename"
+				return 1
+			fi
+		)
+	;;
+	"${cdn}/downloads/forgotton_anne/"*".zip")
+		# Source: https://www.gogdb.org/product/1465348837#downloads
+		case "${ref##*"/"}" in
+			"Animation%20Frames.zip")
+				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_animation_frames.zip" )
+			;;
+			"Artbook.zip")
+				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_artbook.zip" )
+			;;
+			"Early%20Prototype.zip")
+				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_early_prototype.zip" )
+			;;
+			"FA%20OST%20Orchestral%20Edition.zip")
+				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_ost_orchestral_edition_flac.zip, fa_ost_orchestral_edition_mp3.zip" )
+			;;
+			"Music%20Sheet%20-%20To%20Anne.zip")
+				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_music_sheet_to_Anne.zip" )
+			;;
+		esac
+	;;
+	"${cdn}/downloads/no_mans_sky/setup_no_mans_sky_pre-order_dlc_"*)
+		case "${local_sfv:-""}" in
+			*"setup_no_mans_sky_44840_main_(26826).exe"*) :;;
+			*) ( echo_err "NOTICE" "Non-Vulkan compatible version 1.77 is not included" );;
+		esac
+	;;
+	"${cdn}/downloads/moonstone_a_hard_days_knight/moonstone_bonus.zip")
+		# Source: https://www.gogdb.org/product/1854348302#downloads
+		(
+			if [[ -d "moonstone_a_hard_days_knight" ]]; then
+				if ! cd -- "moonstone_a_hard_days_knight"; then
+					echo_err "${1}" "FAILED to unpack"
+					return 1
+				fi
+			fi
+			if unzip -o -- "${1##*"/"}" &>/dev/null; then
+				for i in "moonstone_manual.zip" "moonstone_poster_art.zip"; do
+					if unzip -t -- "${i}" &>/dev/null; then
+						echo "${cdnget_path:-""}${i}: OK"
+					else
+						echo_err "${1}" "FAILED to unpack"
+						return 1
+					fi
+				done
+				rm -f -- "${1##*"/"}"
+				return 1
+			else
+				echo_err "${1}" "FAILED to unpack"
+				return 1
+			fi
+		)
+	;;
+	"${cdn}/downloads/lost_ember/setup_lost_ember_"*".exe")
+		# Source: https://www.gogdb.org/product/1505930119#downloads
+		case "${local_sfv:-""}" in
+			*"setup_lost_ember_1.0.22_(64bit)_(36567).exe"*) :;;
+			*) ( echo_err "NOTICE" "Windows 7 and 8 compatible version 1.0.22 is not included" );;
+		esac
+	;;
+	"${cdn}/"[dp]*"/"?*"."[eE][xX][eE])
+		i="${ref##*"/"}"
+		case "${i}" in
+			"${i//[^0-9A-Za-z\(\)_\.\-]}") :;;
+			*) ( echo_err "WARNING" "${1}: Might be an unoffical file" );;
+		esac
+	;;
+	"${cdn}/"[dp]*"/"?*"."[bB][iI][nN]) return 0;;
+	"${cdn}/"[dp]*"/"?*)
+		i="${ref##*"/"}"
+		case "${i}" in
+			"${i//[^0-9A-Za-z"'"\(\)_\.\-\!\&"+"]}") :;;
+			*) ( echo_err "WARNING" "${1}: Might be an unoffical file" );;
+		esac
+	;;
+	*) return 0;;
+esac
+}
+
+function cdnget_curl() {
+echoauth "${1:-"http://example.com"}" | curl --tlsv1."${opt_tlsv:-"2"}" -C- -K- --connect-timeout 60 --user-agent "${agent}" --referer "${ref}" --progress-bar --output "${file}.part" -- "${1}" 1>&2
+}
+
 function cdnget() {
-local "date" "size" "final_size" "c" "file" "local_sfv" "skip_sfv"
+local "date" "size" "final_size" "c" "file" "skip_sfv"
 c=0
 file="${cdnget_path:-""}${1##*"/"}"
+case "${file}" in
+	"road_96/on_the_road_96 _documentary.zip"|"on_the_road_96 _documentary.zip")
+		file="${file/%'%20'/' '}"
+	;;
+esac
 if [[ -s "${file}" ]]; then
 	return 0
 fi
+case "${1}" in
+	"${cdn}/downloads/moonstone_a_hard_days_knight/moonstone_bonus.zip")
+		if [[ -s "${cdnget_path:-""}moonstone_manual.zip" ]] && [[ -s "${cdnget_path:-""}moonstone_poster_art.zip" ]]; then
+			return 0
+		fi
+	;;
+esac
 if sslchk "${1:-"http://example.com"}"; then
 	if ! [[ -s "${conf_aria2}" ]]; then
 		opt_www="curl"
 	fi
-	cdget_set_meta "${1}"
+	if ! cdget_set_meta "${1}"; then
+		echo "${1##*"/"}: FAILED"
+		return 1
+	fi
 	case "${no_meta_permission:-"0"}" in 1) echo "${file}: FAILED"; return 1;; esac
 	if ! cdget_no_space "${file}"; then return 1; fi
 	( echo_err "downloading" "${file}"; )
@@ -304,10 +432,10 @@ if sslchk "${1:-"http://example.com"}"; then
 			if [[ -e "${file}.part.aria2" ]]; then
 				rm -f -- "${file}.part" "${file}.part.aria2" 2>/dev/null
 			fi
-			until echoauth "${1:-"http://example.com"}" | curl --tlsv1.3 -C- -K- --connect-timeout 60 --user-agent "${agent}" --referer "${ref}" --progress-bar --output "${file}.part" -- "${1}" 1>&2; do :; done
+			until cdnget_curl "${1:-"http://example.com"}"; do ( cdget_set_meta "${1:-"http://example.com"}"; ) || break; done
 		;;
 		"aria2c")
-			if aria2c --min-tls-version=TLSv1.3 --continue=true --http-auth-challenge=true --conf-path="${conf_aria2}" --no-netrc=true --max-connection-per-server=4 --max-file-not-found=1 --max-tries=0 --timeout=60 --user-agent="${agent}" --referer="${ref}" --enable-color=false --log-level=error --console-log-level=error --summary-interval=0 --download-result=hide --out="${file}.part" -- "${1}" 1>&2; then
+			if aria2c --min-tls-version=TLSv1."${opt_a_tlsv:-"2"}" --continue=true --http-auth-challenge=true --conf-path="${conf_aria2}" --no-netrc=true --max-connection-per-server=4 --max-file-not-found=1 --max-tries=0 --timeout=60 --user-agent="${agent}" --referer="${ref}" --enable-color=false --log-level=error --console-log-level=error --summary-interval=0 --download-result=hide --out="${file}.part" -- "${1}" 1>&2; then
 				echo
 			else
 				echo "${file}: FAILED"; return 1
@@ -334,16 +462,6 @@ case "${size:-"0"}" in
 				case "${opt_crc:-"0"}|${file}" in
 					1"|"?*"."[sS][fF][vV]) :;;
 					1"|"?*)
-							case "${opt_pe32:-"0"}" in
-								0) :;;
-								1"|"?*"."[eE][xX][eE])
-									skip_sfv=1
-									if ! process_exe_pe "${file}"; then
-										echo_err "${file}" "PE checksum does not match"
-										echo "${file}: FAILED"; return 1
-									fi
-								;;
-							esac
 							case "${skip_sfv:-"0"}" in
 								1) unset -- "skip_sfv";;
 								*)
@@ -367,9 +485,9 @@ case "${size:-"0"}" in
 							esac
 					;;
 				esac
-				case "${opt_ggchk:-"0"}" in
-					0) echo "${file}: OK";;
-				esac
+				if quickfix_warn_or_solve "${file}"; then
+					echo "${file}: OK"
+				fi
 			;;
 			*)
 				cho_err "${file}" "Filesize does not match"
@@ -380,12 +498,12 @@ case "${size:-"0"}" in
 esac
 case "${date:-"0"}" in
 	0) :;;
-	????????????"."??) touch -mt "${date}" -- "${file}" 2>/dev/null;;
+	????????????"."??) [[ -e "${file}" ]] && touch -mt "${date}" -- "${file}" 2>/dev/null;;
 esac
 case "${opt_xattr:-"0"}" in
 	1)
-		setfattr -n "user.xdg.referrer.url" -v "${ref:-"${www}"}" -- "${file}" 2>/dev/null
-		setfattr -n "user.xdg.origin.url" -v "${1:-"${cdn}"}" -- "${file}" 2>/dev/null
+		[[ -e "${file}" ]] && setfattr -n "user.xdg.referrer.url" -v "${ref:-"${www}"}" -- "${file}" 2>/dev/null
+		[[ -e "${file}" ]] && setfattr -n "user.xdg.origin.url" -v "${1:-"${cdn}"}" -- "${file}" 2>/dev/null
 	;;
 esac
 return 0
@@ -401,7 +519,7 @@ if type "nslookup" >/dev/null; then
 		*) echo_err "auth" "No Internet connection"; return 1;;
 	esac
 fi
-i=$( echoauth | curl --tlsv1.3 -A "${agent}" -I -s -w "########%{http_code}" -K- -- "${cdn}/auth/authorize" )
+i=$( echoauth | curl --tlsv1."${opt_tlsv:-"2"}" -A "${agent}" -I -s -w "########%{http_code}" -K- -- "${cdn}/auth/authorize" )
 case "${i:-""}" in
 	*"########200"|*"########404")
 		case "${opt_chk_auth:-"0"}" in
@@ -418,8 +536,14 @@ esac
 }
 
 function pkgchk() {
+local "curl_help"
 if type "aria2c" &>/dev/null; then
 	opt_www="aria2c"
+	aria_help=$( aria2c --help=#all )
+	case "${aria_help:-""}" in
+		*" TLSv1.3"*) opt_a_tlsv=3;;
+		*) opt_a_tlsv=2;;
+	esac
 else
 	opt_www="curl"
 fi
@@ -427,17 +551,19 @@ if ! type "b2sum" "${@}" "${opt_www:-"curl"}" &>/dev/null; then
 	printf -- '%s\n' "${name}: please install: coreutils ${*}" 1>&2
 	exit 1
 fi
+curl_help=$( curl --help all )
+case "${curl_help:-""}" in
+	*"--tlsv1.3"*) opt_tlsv=3;;
+	*) opt_tlsv=2;;
+esac
 if type "7z" "tar" &>/dev/null; then
 	opt_crc=1
-fi
-if type "ggchk" &>/dev/null; then
-	opt_ggchk=1
 fi
 if type "setfattr" &>/dev/null; then
 	opt_xattr=1
 fi
-if type "python3" &>/dev/null; then
-	opt_pe32=1
+if type "zenity" &>/dev/null; then
+	opt_gui=1
 fi
 }
 
@@ -454,7 +580,7 @@ case "${1}" in
 	"${www}/game/"?*"/"?*|"${cdn}/sfv/"?*"/"?*|"${cdn}/"?*"/"?*"/"?*"/"?*)
 		return 1
 	;;
-	"${www}/game/"?*|"${cdn}/sfv/"?*|"${cdn}/"?*"/"?*"/"?*) return 0;;
+	"${www}/game/"?*|"${cdn}/sfv/"?*|"${cdn}/patches/"?*|"${cdn}/"?*"/"?*"/"?*) return 0;;
 	"${www}/"?*|"${cdn}/"?*)
 		echo_err "${1}" "Is not a ${gg_name} download link"
 		return 1
@@ -512,19 +638,45 @@ esac
 return 1
 }
 
+function show_donate() {
+local "i"
+i="https://store.${www#*"//"}"
+if type xdg-open &>/dev/null; then
+	xdg-open "${i}" & disown
+elif type firefox-esr &>/dev/null; then
+	firefox-esr -- "${i}" & disown
+elif type firefox &>/dev/null; then
+	firefox -- "${i}" & disown
+elif type chromium &>/dev/null; then
+	chromium -- "${i}" & disown
+elif type chrome &>/dev/null; then
+	chrome -- "${i}" & disown
+else
+	echo_err "no browser: Cannot find a browser"
+	echo "https://store.${www#*"//"}"
+	exit 1
+fi
+exit 0
+}
+
 function show_help() {
 printf -- '%s\n' "Usage: ${name:-"${0##*"/"}"} [OPTION]... [URL/SLUG]...
 Download files from ${gg_name} CDN.
 
+To access, a \"${cdn#*"//"}\" username/password is required.
+
+      --donate   open the ${gg_name} Store link for CDN access
   -u [USERNAME]  set your ${gg_name} CDN username
   -p [PASSWORD]  set your ${gg_name} CDN password
       --reset    reset username/password config
   -w [ADDRESS]   set the ${gg_name} address
   -a, --auth     check authentification and exit
+  -c, --clip-gui open the window to enter URLs/SLUGs to download
   -n, --no-dir   do not put files in a subdirectory
   -l, --latest   list added/updated on ${gg_name} CDN
   -L, --Latest   list slugs of added/updated on ${gg_name} CDN
   -s, --sfv      update offline SFV database
+      --unsafe   do not verify integrity of downloads
   -h, --help     display this help and exit"
 exit "${1:-"0"}"
 }
@@ -553,8 +705,16 @@ case "${1:-""}" in
 		cdnget_path="${cdnget_path:-"unknown"}/"
 		global_path="${cdnget_path}"
 		case "${opt_no_dir:-"0"}" in
-			1) unset -- "cdnget_path";;
+			1) unset -- "cdnget_path"; return 1;;
 		esac
+		case "${PWD##*"/"}/" in
+			"${cdnget_path}") unset -- "cdnget_path"; return 0;;
+		esac
+		if ! [[ -d "${cdnget_path}" ]]; then
+			if ! mkdir -p -- "${cdnget_path}"; then
+				echo_err "${1}" "FAILED"
+			fi
+		fi
 		return 1
 	;;
 	"${www}/game/"?*"/"?*|"${cdn}/"?*) return 1;;
@@ -576,21 +736,6 @@ case "${1:-""}" in
 		fi
 	;;
 esac
-}
-
-function process_list_ggchk() {
-local "i"
-case "${opt_ggchk:-"0"}" in 0) return 0;; esac
-case "${list:-""}" in
-	"") echo_err "${gg_name}" "No filelist found"; code=1; return 1;;
-esac
-while read -r i; do
-	case "${i}" in
-		"${gg_i}"|"${gg_p}"|"${gg_g}") continue;;
-		"END") return "${func_code:-"0"}";;
-	esac
-	if ! ggchk "${cdnget_path:-""}${i##*"/"}"; then func_code=1; fi
-done < <( echo "${list}" )
 }
 
 function process_list() {
@@ -627,9 +772,7 @@ if process_slug "${1}"; then
 		;;
 	esac
 	if process_list; then
-		if ! process_list_ggchk; then
-			code=1; return 1
-		fi
+		return 0
 	else
 		code=1; return 1
 	fi
@@ -641,9 +784,6 @@ else
 		;;
 	esac
  	if ! cdnget "${1}"; then code=1; return 1; fi
-	case "${opt_ggchk:-"0"}" in
-		1) if ! ggchk "${cdnget_path:-""}${1##*"/"}"; then code=1; return 1; fi;;
-	esac
 fi
 }
 
@@ -700,7 +840,7 @@ case "${opt_sfv:-"0"}" in
 		sfv_base="${sfv_base##*"_if/"}"
 	;;
 esac
-if curl --tlsv1.3 --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_base#*"if_/"}" --progress-bar --output "${conf_sfv}" -- "${sfv_base:-""}"; then
+if curl --tlsv1."${opt_tlsv:-"2"}" --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_base#*"if_/"}" --progress-bar --output "${conf_sfv}" -- "${sfv_base:-""}"; then
 	i=$( sha256sum -- "${conf_sfv}" )
 	case "${opt_sfv:-"0"}" in
 		1)
@@ -790,99 +930,6 @@ esac
 cdn="https://cdn.${www#*"//"}"
 }
 
-function process_exe_pe() {
-local "pe_old" "pe" "script" "excl_pe"
-case "${1##*"/"}" in
-	"setup_colin2005.exe") excl_pe="27D82900";;
-	"setup_obscure.exe") excl_pe="E1D42200";;
-	"setup_republic_the_revolution.exe") excl_pe="801FFA2B";;
-	"setup_toca_3.exe") excl_pe="AA452800";;
-esac
-script="#!/usr/bin/env python3
-# -*- coding: utf-8 -*- vim: et noet ci pi sts=0 sw=4 ts=4
-
-from __future__ import print_function
-import sys
-sys.tracebacklimit = 0
-import os, io, argparse, re, struct
-from io import DEFAULT_BUFFER_SIZE as DEFAULT
-
-CODE = 0
-
-def pe_make(FILENAME):
-	SKIP = 344
-	PE = 0
-	READ = False
-	PE_OLD = str(\"00000000\")
-	with open(FILENAME, 'rb') as openfile:
-		while True:
-			DATA = openfile.read(DEFAULT)
-			LEFT = len(DATA) % 4
-			MAX = len(DATA) + ((4-LEFT) * ( LEFT != 0 ))
-			if not DATA:
-				break
-
-			for i in range( int(MAX / 4) ):
-				if READ == False:
-					if i == int(SKIP / 4):
-						READ = True
-						PE_OLD = DATA[344:348].hex().upper()
-						continue
-				if i+1 == (int(MAX / 4)) and LEFT:
-					line = struct.unpack('I', DATA[i*4:]+ (b'\0' * (4-LEFT)) )[0]
-				else:
-					line = struct.unpack('I', DATA[ i*4 : i*4+4 ])[0]
-				PE += line
-				if PE >= 2**32:
-					PE = (PE & 0xffffffff) + (PE >> 32)
-
-
-		PE = (PE & 0xffff) + (PE >> 16)
-		PE = (PE) + (PE >> 16)
-		PE = PE & 0xffff
-
-		PE = PE + os.path.getsize(FILENAME)
-		PE = '%08X' % (PE & 0xffffffff)
-		PE_HASH = PE[6:8] + PE[4:6] + PE[2:4] + PE[0:2]
-		return PE_HASH, PE_OLD
-
-if __name__ == '__main__':
-	try:
-		parser = argparse.ArgumentParser(
-				description='Check PE (32-bit) checksums of GOG installers.')
-
-		parser.add_argument('EXE', action='store', nargs='*')
-		args = parser.parse_args()
-
-		for ARG in args.EXE:
-			PE, PE_OLD = pe_make(ARG)
-			print(PE + \"=\" + PE_OLD)
-			if PE == PE_OLD:
-				sys.exit(0)
-			else:
-				sys.exit(1)
-
-	except KeyboardInterrupt:
-		sys.stderr.close()
-		print ('')
-		sys.stdout.close()
-		sys.exit(130)
-
-	except BrokenPipeError:
-		sys.stderr.close()
-		sys.stdout.close()
-		sys.exit(1)
-
-sys.exit(CODE)"
-pe=$( echo "${script}" | python3 -- "/dev/stdin" -- "${1:-"/dev/zero"}" )
-pe_old="${pe#*"="}"
-pe="${pe%"="*}"
-case "${excl_pe:-"${pe_old:-"x"}"}" in
-	"${pe:-"x"}") return 0;;
-	*) code=1; return 1;;
-esac
-}
-
 function print_notice_fetch_grep() {
 local "i" "i_on"
 while read -r i; do
@@ -923,7 +970,7 @@ while read -r i; do
 		"") return 1;;
 		*) echo "${i}";;
 	esac
-done < <( curl --tlsv1.3 --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}" 2>/dev/null | print_notice_fetch_grep )
+done < <( curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}" 2>/dev/null | print_notice_fetch_grep )
 return 0
 }
 
@@ -1005,12 +1052,16 @@ while read -r i; do
 	case "${i:-""}" in
 		"")continue;;
 	esac
-done < <( curl --tlsv1.3 --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}/rss" 2>/dev/null | print_latest_fetch_grep )
+done < <( curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}/rss" 2>/dev/null | print_latest_fetch_grep )
 c=0
-if type tput &>/dev/null; then
-	m=$( tput lines 2>/dev/null )
-	((m--))
-fi
+case "${SHLVL:-"0"},${BASH_SUBSHELL:-"0"}" in
+	2,0)
+		if type tput &>/dev/null; then
+			m=$( tput lines 2>/dev/null )
+			((m--))
+		fi
+	;;
+esac
 for i in "${title[@]}"; do
 	case "${opt_slug:-"0"}" in
 		1) echo "${slug[$c]:-"unknown"}";;
@@ -1035,9 +1086,28 @@ case "${i:-""}" in
 esac
 }
 
+function set_clipboard() {
+local "i" "list"
+case "${opt_gui:-"0"}${opt_clip:-"0"}" in
+	?0) return 0;;
+	01)
+		printf -- '%s\n' "${name}: please install: zenity" 1>&2
+		exit 1
+	;;
+	11)
+		if i=$( zenity --text-info --editable --name="${gg_name} CDN" --title="${gg_name} CDN" --width=640 --height=480 ); then
+			readarray -t "list" < <( echo "${i}" )
+			args=( "${list[@]}" "${args[@]}" )
+			argc="${#args[@]}"
+		else
+			exit 1
+		fi
+	;;
+esac
+}
 
 function main() {
-local "name" "gg_name" "gg_i" "gg_p" "gg_g" "www" "cdn" "conf_dir" "conf" "conf_aria2" "agent" "conf_sfv" "LANG" "LC_ALL" "OPTERR" "OPTIND" "OPT" "OPTARG" "opt_www" "opt_ggchk" "opt_slug" "global_sfv" "arg" "code"
+local "name" "gg_name" "gg_i" "gg_p" "gg_g" "www" "cdn" "conf_dir" "conf" "conf_aria2" "agent" "conf_sfv" "LANG" "LC_ALL" "OPTERR" "OPTIND" "OPT" "OPTARG" "opt_www" "opt_slug" "global_sfv" "arg" "code"
 LANG=C
 LC_ALL=C
 export "LANG" "LC_ALL"
@@ -1073,17 +1143,20 @@ always_include=" patch_biomutant_1.3_(49718)_to_1.4_(51251).exe
  patch_slop_episode3_2.0.1.2.exe
  patch_the_guild2_pirates_2.0.1.5.exe
  patch_the_witcher_3_wild_hunt_-_game_of_the_year_edition_1.31_(A)_to_1.32.exe "
-pkgchk "curl" # "python3" "nslookup" "ggchk" "aria2c" "7z" "gzip" "tar" "xattr"
-while getopts ":-:p:u:w:anlLh" "OPT"; do
+pkgchk "curl" # "python3" "nslookup" "aria2c" "7z" "gzip" "tar" "xattr"
+while getopts ":-:p:u:w:acnlLh" "OPT"; do
 	case "${OPT}" in
 		-)
 			case "${OPTARG}" in
+				donate) show_donate;;
 				a|auth|authentification) opt_chk_auth=1;;
+				c|clip|clip-gui|gui-clip|clipboard) opt_clip=1;;
 				n|no-dir|no-directory|no-folder) opt_no_dir=1;;
 				sfv) opt_sfv=1;;
 				reset) auth_zero;;
 				l|list|latest|list-latest|latest-list) print_latest_fetch;;
 				L|List|Latest|List-[lL]atest|Latest-[lL]ist) opt_slug=1; print_latest_fetch;;
+				unsafe) opt_crc=0;;
 				h|help) show_help;;
 				*) show_help 1 1>&2;;
 			esac
@@ -1092,6 +1165,7 @@ while getopts ":-:p:u:w:anlLh" "OPT"; do
 		p) set_auth_opt;;
 		w) set_www_opt;;
 		a) opt_chk_auth=1;;
+		c) opt_clip=1;;
 		n) opt_no_dir=1;;
 		l) print_latest_fetch;;
 		L) opt_slug=1; print_latest_fetch;;
@@ -1111,17 +1185,15 @@ mkconf
 sfvchk
 case "${opt_sfv:-"0"}" in
 	1) if ! sfvget; then exit 1; fi;;
-	*)
-		if ! [[ -s "${conf_sfv}" ]]; then
-			if ! sfvget; then exit 1; fi
-		fi
-	;;
 esac
+args=( "${@}" )
+argc="${#}"
+set_clipboard
 unset -- "sfv_base" "sfv_base_sha"
-case "${opt_chk_auth:-"0"},${#}" in 0,0) exit 0;; 0,*) sfv_to_ram;; esac
+case "${opt_chk_auth:-"0"},${argc}" in 0,0) exit 0;; 0,*) sfv_to_ram;; esac
 authset; sslchk
 if ! logchk; then exit 1; fi
-for arg in "${@}"; do
+for arg in "${args[@]}"; do
 	rmslash_arg
 	if is_gg "${arg}"; then
 		ref="${arg}"
