@@ -1,5 +1,7 @@
 # GG-Downloader
-Download games via command line. Requires a cdn.gog-games.com username and password.
+Download files from GOG Games CDN.
+
+To access, a "cdn.gog-games.com" username/password is required.
 
 ## TL:DR I'm dumb
 1. Download and make executable: `chmod +x gg-downloader`
@@ -10,28 +12,36 @@ Download games via command line. Requires a cdn.gog-games.com username and passw
 ## Usage
 ./gg-downloader [OPTION] [URL/SLUG]
 
-***-u [USERNAME]*** set your username
+**Options**
 
-***-p [PASSWORD]*** set your password
+***--donate*** open the GOG Games Store link for CDN access
+
+***-u [USERNAME]*** set your GOG Games CDN username
+
+***-p [PASSWORD]*** set your GOG Games CDN password
 
 ***--reset*** reset username/password config
 
-***-w [ADDRESS]*** set the GOG-Games address
+***-w [ADDRESS]*** set the GOG Games address
 
 ***-a, --auth*** check authentification and exit
 
+***-c, --clip-gui*** open the window to enter URLs/SLUGs to download
+
 ***-n, --no-dir*** do not put files in a subdirectory
 
-***-l, --latest*** list added/updated games
+***-l, --latest*** list added/updated on GOG Games CDN
 
-***-L, --Latest*** list slugs of added/updated games
+***-L, --Latest*** list slugs of added/updated on GOG Games CDN
 
 ***-s, --sfv*** update offline SFV database
 
+***--unsafe*** do not verify integrity of downloads
+
 ***--help*** display this help and exit
 
-## Requirements
+# Requirements
 `bash coreutils curl`
 
-## Optional Packages
-`python>=3.7 nslookup ggchk aria2c 7z gzip tar attr`
+**Optional Packages**
+`nslookup aria2c 7z gzip tar attr ncurses zenity`
