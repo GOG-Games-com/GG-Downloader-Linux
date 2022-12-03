@@ -85,7 +85,7 @@ mkconf_sec
 function mkconf_sec_set() {
 if chown "${UID}:${GROUPS[0]}" -- "${2:-"${conf}"}"; then
 	if ! chmod "${1:-"0600"}" -- "${2:-"${conf}"}"; then
-		echo_err "${1}" "Cannot to set config${3:-" file"} permissions"
+		echo_err "${1}" "Cannot set config${3:-" file"} permissions"
 		return 1
 	fi
 else
@@ -131,7 +131,7 @@ esac
 function auth_zero() {
 local "i"
 if [[ -s "${conf}" ]]; then
-	if ! read -p "Are you sure? (y/N) " -r "i"; then exit 1; fi
+	if ! read -p "Are you sure? (y/N) " -r "i" 1>&2; then exit 1; fi
 	case "${i:-""}" in
 		[yY][eE][sS]|[yY]) :;; *) exit 1;;
 	esac
@@ -180,43 +180,23 @@ case "${1:-"${cdn:-""}"}" in
 esac
 }
 
-function lsget_grep() {
+function lsget_sfv() {
 local "i"
-while read -r i; do
-	case "${i}" in
-		*"${m%%"|"*}"*|*"${m##*"|"}"*) echo "${i}";;
-	esac
-done
-}
-
-function lsget() {
-local "m" "i" "old_i" "type" "no_repeat"
-no_repeat=""
-m='<span class="filename">|<div class="title">'
-while read -r i; do
-	i="${i%"</span>"*}"
-	i="${i%%" Included</div>"*}"
-	i="${i##*">"}"
-	case "${no_repeat:-"<.>"}" in *"<:>${i}<:>"*) continue;; esac
-	case "${i:-"###"}" in
-		"${gg_i}"|"${gg_g}") type="downloads"; continue;;
-		"${gg_p}") type="patches"; continue;;
-		"${old_i:-"@@@"}") continue;;
-		*";"*) i="${i//"&#039;"/"'"}"; i="${i//"&amp;"/"&"}";;
-	esac
-	case "${type:-"downloads"}|${i}" in
-		"downloads|setup_streets_of_rogue_v97_4_(64bit)_(58917).md5")
-			continue
-		;;
-		"downloads|"*)
-			echo "${cdn}/downloads/${ref##*"/"}/${i}"
-		;;
-		"patches|"*)
-			continue
-		;;
-	esac
-	old_i="${i}"
-done < <( curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref}" --silent --output - -- "${1}" | lsget_grep )
+case "${global_sfv:-""}" in
+	"") :;;
+	*)
+		while read -r i; do
+			case "${i}" in
+				"streets_of_rogue/setup_streets_of_rogue_v97_4_(64bit)_(58917).md5  "????????)
+					continue
+				;;
+				"${1##*"/"}/"?*)
+					echo "${cdn}/downloads/${i/%"  "????????}"
+				;;
+			esac
+		done < <( echo "${global_sfv}" )
+	;;
+esac
 echo "END"
 }
 
@@ -315,63 +295,65 @@ case "${ref:-""}" in
 			fi
 		)
 	;;
-	"${cdn}/downloads/forgotton_anne/"*".zip")
-		# Source: https://www.gogdb.org/product/1465348837#downloads
-		case "${ref##*"/"}" in
-			"Animation%20Frames.zip")
-				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_animation_frames.zip" )
-			;;
-			"Artbook.zip")
-				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_artbook.zip" )
-			;;
-			"Early%20Prototype.zip")
-				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_early_prototype.zip" )
-			;;
-			"FA%20OST%20Orchestral%20Edition.zip")
-				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_ost_orchestral_edition_flac.zip, fa_ost_orchestral_edition_mp3.zip" )
-			;;
-			"Music%20Sheet%20-%20To%20Anne.zip")
-				( echo_err "WARNING" "${1}: Is an unoffical file. Official: fa_music_sheet_to_Anne.zip" )
+	"${cdn}/downloads/crossroads_inn/setup_crossroads_inn_"*".exe")
+		# Source: https://store.steampowered.com/news/app/867290/view/3002194240347217977
+		case "${local_sfv:-""}" in
+			*"setup_crossroads_inn_anniversary_edition_4.0.0_(48319).exe"*) :;;
+			*"setup_crossroads_inn_-_bath_"*"beauty_"*".exe"*)
+				case "${warn_crossroads_inn:-"0"}" in
+					0) warn_crossroads_inn=1; ( echo_err "NOTICE" "Windows 7 and 8 compatible version 4.0.0 is not included" );;
+				esac
 			;;
 		esac
 	;;
-	"${cdn}/downloads/no_mans_sky/setup_no_mans_sky_pre-order_dlc_"*)
+	"${cdn}/downloads/no_mans_sky/setup_no_mans_sky_"*".exe")
+		# Source: https://www.nomanssky.com/2019/04/vulkan-update/
 		case "${local_sfv:-""}" in
 			*"setup_no_mans_sky_44840_main_(26826).exe"*) :;;
-			*) ( echo_err "NOTICE" "Non-Vulkan compatible version 1.77 is not included" );;
+			*"setup_no_mans_sky_pre-order_dlc_"*".exe"*)
+				case "${warn_no_mans_sky:-"0"}" in
+					0) warn_no_mans_sky=1; ( echo_err "NOTICE" "Non-Vulkan compatible version 1.77 is not included" );;
+				esac
+			;;
 		esac
 	;;
 	"${cdn}/downloads/moonstone_a_hard_days_knight/moonstone_bonus.zip")
 		# Source: https://www.gogdb.org/product/1854348302#downloads
 		(
-			if [[ -d "moonstone_a_hard_days_knight" ]]; then
-				if ! cd -- "moonstone_a_hard_days_knight"; then
+			if type unzip &>/dev/null; then
+				if [[ -d "moonstone_a_hard_days_knight" ]]; then
+					if ! cd -- "moonstone_a_hard_days_knight"; then
+						echo_err "${1}" "FAILED to unpack"
+						return 1
+					fi
+				fi
+					if unzip -o -- "${1##*"/"}" &>/dev/null; then
+					for i in "moonstone_manual.zip" "moonstone_poster_art.zip"; do
+						if unzip -t -- "${i}" &>/dev/null; then
+							echo "${cdnget_path:-""}${i}: OK"
+						else
+							echo_err "${1}" "FAILED to unpack"
+							return 1
+						fi
+					done
+					rm -f -- "${1##*"/"}"
+					return 1
+				else
 					echo_err "${1}" "FAILED to unpack"
 					return 1
 				fi
 			fi
-			if unzip -o -- "${1##*"/"}" &>/dev/null; then
-				for i in "moonstone_manual.zip" "moonstone_poster_art.zip"; do
-					if unzip -t -- "${i}" &>/dev/null; then
-						echo "${cdnget_path:-""}${i}: OK"
-					else
-						echo_err "${1}" "FAILED to unpack"
-						return 1
-					fi
-				done
-				rm -f -- "${1##*"/"}"
-				return 1
-			else
-				echo_err "${1}" "FAILED to unpack"
-				return 1
-			fi
 		)
 	;;
 	"${cdn}/downloads/lost_ember/setup_lost_ember_"*".exe")
-		# Source: https://www.gogdb.org/product/1505930119#downloads
+		# Source: https://store.steampowered.com/news/app/563840/view/2495506303006776298
 		case "${local_sfv:-""}" in
 			*"setup_lost_ember_1.0.22_(64bit)_(36567).exe"*) :;;
-			*) ( echo_err "NOTICE" "Windows 7 and 8 compatible version 1.0.22 is not included" );;
+			*"lost_ember_soundtrack_mp3.zip"*)
+				case "${warn_lost_ember:-"0"}" in
+					0) warn_lost_ember=1; ( echo_err "NOTICE" "Windows 7 and 8 compatible version 1.0.22 is not included" );;
+				esac
+			;;
 		esac
 	;;
 	"${cdn}/"[dp]*"/"?*"."[eE][xX][eE])
@@ -406,14 +388,29 @@ case "${file}" in
 		file="${file/%'%20'/' '}"
 	;;
 esac
-if [[ -s "${file}" ]]; then
-	return 0
-fi
 case "${1}" in
 	"${cdn}/downloads/moonstone_a_hard_days_knight/moonstone_bonus.zip")
 		if [[ -s "${cdnget_path:-""}moonstone_manual.zip" ]] && [[ -s "${cdnget_path:-""}moonstone_poster_art.zip" ]]; then
 			return 0
 		fi
+	;;
+	*)
+		case "${opt_refresh:-"0"},${opt_crc:-"0"}" in
+			0,1|*,0) if [[ -s "${file}" ]]; then return 0; fi;;
+			1,1)
+				if [[ -f "${file}" ]]; then
+					final_sfv=$( process_make_crc "${file}" )
+					case "${file}" in
+							*"/"*) :;;
+							*) final_sfv="${global_path:-"?/"}${final_sfv}"
+					esac
+					case "${local_sfv:-"${global_sfv:-"${final_sfv}"}"}" in
+						*"${final_sfv}"*) echo "${file}: SKIP"; return 0;;
+						*) rm -- "${file}" || return 1;; esac
+					unset -- "final_sfv"
+				fi
+			;;
+		esac
 	;;
 esac
 if sslchk "${1:-"http://example.com"}"; then
@@ -490,7 +487,7 @@ case "${size:-"0"}" in
 				fi
 			;;
 			*)
-				cho_err "${file}" "Filesize does not match"
+				echo_err "${file}" "Filesize does not match"
 				echo "${file}: FAILED"; return 1
 			;;
 		esac
@@ -512,7 +509,7 @@ return 0
 function logchk() {
 local "i"
 if type "nslookup" >/dev/null; then
-	i=$( nslookup "${cdn#*"//"}" "1.1.1.1" 2>/dev/null )
+	i=$( nslookup "${cdn#*"//"}" 2>/dev/null )
 	case "${i:-""}" in
 		*"*** Can't find"*|*"** server can't find "*) echo_err "auth" "An incorrect CDN address"; return 1;;
 		*"Name:	${cdn#*"//"}"*) :;;
@@ -530,7 +527,7 @@ case "${i:-""}" in
 	*"########401") echo_err "auth" "Incorrect username/password"; return 1;;
 	*"########403") echo_err "auth" "Cannot find the log-in page on ${gg_name} CDN"; return 1;;
 	*"########503") echo_err "auth" "Multiple log-ins are not allowed"; return 1;;
-	*"########521") echo_err "auth" "${gg_name} CDN is offline"; print_notice; return 1;;
+	*"########521") echo_err "auth" "${gg_name} CDN is offline"; return 1;;
 	*) echo_err "auth" "Cannot contact ${gg_name} CDN"; return 1;;
 esac
 }
@@ -556,6 +553,9 @@ case "${curl_help:-""}" in
 	*"--tlsv1.3"*) opt_tlsv=3;;
 	*) opt_tlsv=2;;
 esac
+if type "python3" &>/dev/null; then
+	opt_py=1
+fi
 if type "7z" "tar" &>/dev/null; then
 	opt_crc=1
 fi
@@ -600,8 +600,7 @@ case "${1}" in
 esac
 case "${1}" in
 	[0123456789]|10|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])
-		echo_err "${1}" "GOG IDs are not supported"
-		return 1
+		return 0
 	;;
 	[0-9a-z]*)
 		case "${1}" in
@@ -659,8 +658,12 @@ fi
 exit 0
 }
 
+function print_ver() {
+printf -- '%s\n' "${name:-"${0##*"/"}"} ${agent##*'/'}"
+}
+
 function show_help() {
-printf -- '%s\n' "Usage: ${name:-"${0##*"/"}"} [OPTION]... [URL/SLUG]...
+printf -- '%s\n' "Usage: ${name:-"${0##*"/"}"} [OPTION]... [URL/SLUG/ID]...
 Download files from ${gg_name} CDN.
 
 To access, a \"${cdn#*"//"}\" username/password is required.
@@ -671,23 +674,86 @@ To access, a \"${cdn#*"//"}\" username/password is required.
       --reset    reset username/password config
   -w [ADDRESS]   set the ${gg_name} address
   -a, --auth     check authentification and exit
-  -c, --clip-gui open the window to enter URLs/SLUGs to download
-  -n, --no-dir   do not put files in a subdirectory
-  -l, --latest   list added/updated on ${gg_name} CDN
-  -L, --Latest   list slugs of added/updated on ${gg_name} CDN
-  -s, --sfv      update offline SFV database
+  -c, --clip-gui open the window to enter URLs/SLUGs/IDs to download
+
+      --setup    download installers of a product (default)
+      --no-setup do not download installers of a product
+      --extra    download goodies of a product (default)
+      --no-extra do not download goodies of a product
+  -k, --keep     always keep (don't delete) the old files (default)
+  -f, --fresh    delete the old files when checksums are different
+  -n, --no-dir   do not put files in a slug subdirectory
       --unsafe   do not verify integrity of downloads
-  -h, --help     display this help and exit"
+
+  -s, --sync     update the products in slug subdirectories and exit
+      --clean    when a sync, delete foreign non-sync files
+  -d [SFV]       when a sync, compare the newer data against the SFV
+
+  -l, --latest   list added/updated on ${gg_name} CDN and exit
+  -L, --Latest   list slugs of added/updated on ${gg_name} CDN and exit
+      --lsync    list slug links for a sync and exit
+      --Lsync    list ${gg_name} CDN links for a sync and exit
+      --Lclean   list foreign non-sync files and exit
+      --sfv      update the offline SFV database (default on sync)
+      --no-sfv   do not update the offline SFV database
+
+  -S [SFV]       a shortcut for --sync, --fresh, -d [SFV], --clean
+  -g [SFV]       a shortcut for --lsync, -d [SFV]
+  -G [SFV]       a shortcut for --Lsync, -d [SFV]
+  -F [SFV]       a shortcut for --Lclean, -d [SFV]
+
+  -h, --help     display this help and exit
+      --version  output version information and exit"
 exit "${1:-"0"}"
+}
+
+function process_id_fetch_db() {
+curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "https://www.gogdb.org/data/products/${1:-"0"}/product.json" 2>/dev/null
+printf -- '\n'
+}
+
+function process_id_fetch() {
+curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www//'://'/'://beta.'}/0/game/${1:-"0"}" 2>/dev/null
+printf -- '\n'
+}
+
+function process_id() {
+local "i"
+case "${1:-"-"}" in
+	[1-9]|10|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])
+		i=$( process_id_fetch "${1:-"0"}" )
+		case "${i:-""}" in
+			*'"slug":'*) :;;
+			*) i=$( process_id_fetch_db "${1:-"0"}" );;
+		esac
+		case "${i:-""}" in
+			*'"slug":'*) :;;
+			*) return 1;;
+		esac
+		global_path="${i#*'"slug": "'}"
+		global_path="${global_path#*'"slug":"'}"
+		global_path="${global_path%%'",'*}"
+		global_path="${global_path/%/'/'}"
+		global_path="${global_path:-""}"
+		cdnget_path="${global_path:-""}"
+		case "${opt_no_dir:-"0"}" in
+			1) unset -- "cdnget_path"; return 0;;
+		esac
+		case "${PWD##*"/"}/" in
+			"${cdnget_path}") unset -- "cdnget_path"; return 0;;
+		esac
+		if ! [[ -d "${cdnget_path}" ]]; then
+			if ! mkdir -p -- "${cdnget_path}"; then
+				echo_err "${1}" "FAILED"
+			fi
+		fi
+	;;
+	*) return 1;;
+esac
 }
 
 function process_slug() {
 case "${1:-""}" in
-	"${cdn}/patches/"?*)
-		global_path=""
-		unset -- "cdnget_path"
-		return 1
-	;;
 	"${cdn}/downloads/"?*"/"?*)
 		cdnget_path="${1#*"${cdn}/downloads/"}"
 		cdnget_path="${cdnget_path#*"${cdn}/patches/"}"
@@ -735,13 +801,46 @@ case "${1:-""}" in
 			fi
 		fi
 	;;
+	*)
+		global_path=""
+		unset -- "cdnget_path"
+		return 1
+	;;
 esac
+}
+
+function process_list_filtration() {
+local "i" "read_not"
+case "${opt_game:-"1"},${opt_goodie:-"1"}" in
+	1,1) cat && read_not=0;;
+	*)
+		while read -r i; do
+			case "${i:-""}" in
+				"") continue;;
+				*?"/"[pP][aA][tT][cC][hH]_?*"."[eE][xX][eE]'  '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|\
+				*?"/"[pP][aA][tT][cC][hH]_?*"."[bB][iI][nN]'  '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|\
+				*?"/"[sS][eE][tT][uU][pP]_?*"."[eE][xX][eE]'  '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|\
+				*?"/"[sS][eE][tT][uU][pP]_?*"."[bB][iI][nN]'  '[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|\
+				*?"/"[pP][aA][tT][cC][hH]_?*"."[eE][xX][eE]|*?"/"[pP][aA][tT][cC][hH]_?*"."[bB][iI][nN]|\
+				*?"/"[sS][eE][tT][uU][pP]_?*"."[eE][xX][eE]|*?"/"[sS][eE][tT][uU][pP]_?*"."[bB][iI][nN])
+					case "${opt_game:-"1"}" in 1) read_not=0; echo "${i}";; esac;;
+				*?"/"?*) case "${opt_goodie:-"1"}" in 1) read_not=0; echo "${i}";; esac;;
+			esac
+		done
+	;;
+esac
+return "${read_not:-"1"}"
 }
 
 function process_list() {
 local "i"
 case "${list:-""}" in
 	"") echo_err "${gg_name}" "No filelist found"; code=1; return 1;;
+	*)
+		if ! list=$( echo "${list}" | process_list_filtration ); then
+			echo_err "${gg_name}" "Nothing to download"; code=1; return 1
+		fi
+	;;
 esac
 while read -r i; do
 	case "${i}" in
@@ -752,30 +851,71 @@ while read -r i; do
 done < <( echo "${list}" )
 }
 
+function process_act_is_in_queue() {
+case "${opt_process_act_err_show:-""}" in
+	"")
+		i=$( curl --connect-timeout 2 --max-time 10 --tlsv1."${opt_tlsv:-"2"}" -A "${agent}" --referer "${ref:-"${www}"}" -I -s -w "########%{http_code}" -- "${www}" )
+		case "${i:-""}" in *"########200") opt_process_act_err_show=1;; *) opt_process_act_err_show=0; return 1;; esac
+	;;
+	1) return 1;;
+esac
+i=$( curl --connect-timeout 2 --max-time 30 --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}/queue" 2>/dev/null | grep -IF -- '/game/' )
+case "${i:-"/game/"}" in *" href=\"/game/${global_path%"/"}\""*) return 0;; *) return 1;; esac
+}
+
+function process_act() {
+cdnget_local_sfv
+case "${no_meta_permission:-"0"}" in
+	1)
+		echo "${1##*"/"}: FAILED"
+		return 1
+	;;
+esac
+case "${local_sfv:-""}" in
+	"")
+		if process_act_is_in_queue; then
+			echo_err "${1##*"/"}" "Updating game files"
+		else
+			echo_err "${1##*"/"}" "No game files found"
+		fi
+		echo "${1##*"/"}: FAILED"
+		return 1
+	;;
+	*"."[eE][xX][eE]"  "?*)
+		list=$(
+			while read -r i; do
+				echo "${cdn}/downloads/${i/%"  "????????}"
+			done < <( echo "${local_sfv}" )
+		)
+	;;
+	*"."?*"  "?*)
+		case "${opt_game:-"1"}" in
+			1)
+				if process_act_is_in_queue; then
+					echo_err "${1##*"/"}" "Updating game files"
+				else
+					echo_err "${1##*"/"}" "No game setup found"
+				fi
+				echo "${1##*"/"}: FAILED"
+				return 1
+			;;
+		esac
+	;;
+esac
+if process_list; then
+	return 0
+else
+	code=1; return 1
+fi
+}
+
 function process() {
 local "list" "cdnget_path" "global_path" "local_sfv"
 unset -- "arg"
-if process_slug "${1}"; then
-	list=$( lsget "${1}" )
-	case "${list:-""}" in
-		"END")
-			echo_err "${1##*"/"}" "No game files found"
-			echo "${1##*"/"}: FAILED"
-			return 1
-		;;
-	esac
-	cdnget_local_sfv
-	case "${no_meta_permission:-"0"}" in
-		1)
-			echo "${1##*"/"}: FAILED"
-			return 1
-		;;
-	esac
-	if process_list; then
-		return 0
-	else
-		code=1; return 1
-	fi
+if process_id "${1}"; then
+	process_act "${1}" || return 1
+elif process_slug "${1}"; then
+	process_act "${1}" || return 1
 else
 	cdnget_local_sfv
 	case "${no_meta_permission:-"0"}" in
@@ -831,16 +971,54 @@ if [[ -s "${conf_sfv}" ]]; then
 fi
 }
 
+function sfvget_stamp() {
+local "i" "t"
+while read -r i; do
+	case "${i}" in
+		*'"'[0-9][0-9][0-9][0-9]'-'[01][0-9]'-'[0-9][0-9]'T'[0-9][0-9]':'[0-9][0-9]':'[0-9][0-9]'Z"'*)
+			i="${i%'Z"'*}Z"
+			i="${i##*'"'}"
+			t=$( date -d "${i}" -- '+%s' )
+			break
+		;;
+	esac
+done < <( curl --silent --tlsv1."${opt_tlsv:-"2"}" --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_base#*"if_/"}" --progress-bar --output - -- "https://github.com/${git}/commits/main" 2>/dev/null )
+case "${t:-""}" in
+	"") echo "${EPOCHSECONDS}"; return 1;;
+	*) echo "${t}"; return 0;;
+esac
+}
+
 function sfvget() {
-local "i"
+local "i" "t" "t_i"
 case "${opt_crc:-"0"}" in 0) return 0;; esac
-( echo_err "downloading" "${conf_sfv##*"/"}"; )
 case "${opt_sfv:-"0"}" in
 	1)
 		sfv_base="${sfv_base##*"_if/"}"
 	;;
 esac
-if curl --tlsv1."${opt_tlsv:-"2"}" --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_base#*"if_/"}" --progress-bar --output "${conf_sfv}" -- "${sfv_base:-""}"; then
+t=$( stat --printf='%Y' -- "${conf_sfv}" 2>/dev/null )
+t="${t:-"0"}"
+t=$(( t + 10 ))
+if [[ "${EPOCHSECONDS}" -lt "${t:-"0"}" ]]; then
+	return 0
+else
+	t=$(( t - 10 ))
+fi
+t_i=$( sfvget_stamp )
+t_i="${t_i:-"1"}"
+if [[ "${t_i}" = "${t}" ]]; then
+	return 0
+else
+	unset -- "i"
+	t_i=$( date -d "@${t_i:-"${EPOCHSECONDS}"}" -- '+%Y%m%d%H%M.%S' )
+fi
+if [[ -s "${conf_sfv}" ]]; then
+   	if !  mv -- "${conf_sfv}" "${conf_sfv}.tmp"; then
+		echo "${name}: ${conf_sfv##*"/"}: FAILED" 1>&2
+    fi
+fi
+if curl --tlsv1."${opt_tlsv:-"2"}" --connect-timeout 60 --user-agent "${agent}" --referer "${sfv_base#*"if_/"}" --progress-bar --output "${conf_sfv}" -- "${sfv_base:-""}" 2>/dev/null; then
 	i=$( sha256sum -- "${conf_sfv}" )
 	case "${opt_sfv:-"0"}" in
 		1)
@@ -851,20 +1029,28 @@ if curl --tlsv1."${opt_tlsv:-"2"}" --connect-timeout 60 --user-agent "${agent}" 
 		"${sfv_base_sha:-""}")
 			if mkconf_sec_set "0600" "${conf_sfv}" " file (SFV)"; then
 				if gzip --test -- "${conf_sfv}" &>/dev/null; then
-					echo "${name}: ${conf_sfv##*"/"}: OK" 1>&2
+					rm -f -- "${conf_sfv}.tmp"
+					touch -cmt "${t_i}" -- "${conf_sfv}"
 					return 0
 				else
 					rm -f -- "${conf_sfv}"
+					[[ -s "${conf_sfv}.tmp" ]] && mv -- "${conf_sfv}.tmp" "${conf_sfv}"
+        			echo_err "${conf_sfv##*"/"}: The SFV archive is corrupted"
 					echo "${name}: ${conf_sfv##*"/"}: FAILED" 1>&2
+                    return 1
 				fi
 			else
+				rm -f -- "${conf_sfv}"
+				[[ -s "${conf_sfv}.tmp" ]] && mv -- "${conf_sfv}.tmp" "${conf_sfv}"
+				code=1
 				echo "${name}: ${conf_sfv##*"/"}: FAILED" 1>&2
 				return 1
 			fi
 		;;
 		*)
 			rm -f -- "${conf_sfv}"
-			echo_err "${conf_sfv##*"/"}: The web archive is corrupted"
+			[[ -s "${conf_sfv}.tmp" ]] && mv -- "${conf_sfv}.tmp" "${conf_sfv}"
+			echo_err "${conf_sfv##*"/"}: The SFV archive is corrupted"
 			echo "${name}: ${conf_sfv##*"/"}: FAILED" 1>&2
 			return 1
 		;;
@@ -928,61 +1114,6 @@ case "${OPTARG:-""}" in
 	;;
 esac
 cdn="https://cdn.${www#*"//"}"
-}
-
-function print_notice_fetch_grep() {
-local "i" "i_on"
-while read -r i; do
-	case "${i}" in
-		*'<div id="notice">'*)
-		i_on=1
-		;;
-	esac
-	case "${i_on:-"0"}" in
-		1) echo "${i}";;
-	esac
-done
-}
-
-function print_notice_fetch() {
-local "i"
-while read -r i; do
-	case "${i}" in
-		"<div id=\"notice\">") continue;;
-		"<span class=\"txt-red\">"*) :;;
-		"</div>"|"<div class=\""*|"<form "*|"<button "*|"<h1>"*|"<a class="*)
-			break
-		;;
-	esac
-	while true; do
-		case "${i:-""}" in
-			"") return 1;;
-			"<"*) i="${i#*">"}";;
-			*"</"*) i="${i%"</"*}";;
-			?*) break;;
-			*) return 1;;
-		esac
-	done
-	i="${i//[^[:print:]]}"
-	i="${i//'"'/"'"}"
-	i="\"${i}\""
-	case "${i:-""}" in
-		"") return 1;;
-		*) echo "${i}";;
-	esac
-done < <( curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}" 2>/dev/null | print_notice_fetch_grep )
-return 0
-}
-
-function print_notice() {
-local "i"
-if ! i=$( print_notice_fetch ); then return 1; fi
-case "${i:-""}" in
-	"") return 1;;
-	*)
-		echo_err "notice" "${i}"
-	;;
-esac
 }
 
 function print_latest_fetch_grep() {
@@ -1053,9 +1184,10 @@ while read -r i; do
 		"")continue;;
 	esac
 done < <( curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www}/rss" 2>/dev/null | print_latest_fetch_grep )
+case "${title[0]:-""}" in "") return 1;; esac
 c=0
 case "${SHLVL:-"0"},${BASH_SUBSHELL:-"0"}" in
-	2,0)
+	2,1)
 		if type tput &>/dev/null; then
 			m=$( tput lines 2>/dev/null )
 			((m--))
@@ -1075,15 +1207,95 @@ done
 return 0
 }
 
-function print_latest() {
-local "i"
-if ! i=$( print_latest_fetch ); then return 1; fi
-case "${i:-""}" in
-	"") return 1;;
-	*)
-		echo "${i}"
+function print_latest_fetch_beta() {
+local "i" "title" "date" "slug" "c"
+title=()
+date=()
+slug=()
+while read -r i; do
+	case "${i}" in '"data": ['*) do=1;; '],') do=0;; esac
+	case "${do:-"0"}${i}" in
+		'1"title": "'?*)
+			i="${i/#'"title": "'}"
+			i="${i/%'",'}"
+			printf -v "i" -- '%b' "${i}"
+			i="${i//'"'/"'"}"
+			i="${i//[^[:print:]]}"
+			title+=( "${i:-""}" )
+		;;
+		'1"last_update": "'?*)
+			i="${i/#'"last_update": "'}"
+			i="${i/%'"'}"
+			i=$( date -d "${i:-"now"}" -- "+%+4Y-%m-%d %H:%M:%S" 2>/dev/null )
+			date+=( "${i:-"????-??-?? ??:??:??"}" )
+		;;
+		'1"slug": "'?*)
+			i="${i/#'"slug": "'}"
+			i="${i/%'",'}"
+			slug+=( "${i:-""}" )
+		;;
+		*) continue;;
+	esac
+done < <(
+curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www//'://'/'://beta.'}/search?search=&is_new=true&is_updated=false" 2>/dev/null | python3 -mjson.tool 2>/dev/null &
+curl --tlsv1."${opt_tlsv:-"2"}" --user-agent "${agent}" --referer "${ref:-"${www}"}" --silent --output - -- "${www//'://'/'://beta.'}/search?search=&is_new=false&is_updated=true" 2>/dev/null | python3 -mjson.tool 2>/dev/null &
+wait
+)
+case "${title[0]:-""}" in "") return 1;; esac
+c=0
+readarray -t "list" < <(
+for i in "${title[@]}"; do
+	case "${opt_slug:-"0"}" in
+		1) echo "${date[$c]:-"????-??-?? ??:??:??"} ${slug[$c]:-"unknown"}";;
+		*) echo "${date[$c]:-"????-??-?? ??:??:??"} \"${title[$c]:-"Unknown Title"}\"";;
+	esac
+	((c++))
+done | sort -Vr
+)
+c=0
+case "${SHLVL:-"0"},${BASH_SUBSHELL:-"0"}" in
+	2,1)
+		if type tput &>/dev/null; then
+			m=$( tput lines 2>/dev/null )
+			((m--))
+		fi
 	;;
 esac
+for i in "${list[@]}"; do
+	case "${opt_slug:-"0"}" in
+		1) echo "${i:20}";;
+		*) echo "${i:0:10} ${i:20}";;
+	esac
+	((c++))
+	case "${c:-"x"}" in
+		"${m:-"y"}") break;;
+	esac
+done
+return 0
+}
+
+function print_latest() {
+local "i"
+i=$( print_latest_fetch )
+case "${i:-""}" in
+	"")
+		case "${opt_py:-""}" in
+			1) i=$( print_latest_fetch_beta );;
+			*)
+				printf -- '%s\n' "${name}: please install: python3" 1>&2
+				exit 1
+			;;
+		esac
+	;;
+esac
+case "${i:-""}" in
+	"") :;;
+	*)
+		echo "${i}"
+		exit 0
+	;;
+esac
+exit 1
 }
 
 function set_clipboard() {
@@ -1106,11 +1318,219 @@ case "${opt_gui:-"0"}${opt_clip:-"0"}" in
 esac
 }
 
+function sync_scan_grep() {
+local "i" "old_i" "t"
+case "${1:-"0"}" in
+	"1") while read -r i; do case "${i}" in *?'/') continue;; "< "?*) echo "${i#"< "}";; esac; done;;
+	"2") while read -r i; do case "${i}" in *?'/') continue;; "> "?*) echo "${i#"> "}";; esac; done;;
+	"3")
+		while read -r i; do
+			case "${i}" in
+				*?'/') continue;;
+				"> "?*)
+					i="${i#"> "}"
+					i="${i%%'/'*}"
+					printf -v 't' -- "${i%"/"*}/"*"/${i##*"/"}"
+					case "${t:-""}" in *'/*/'*) :;; *) continue;; esac
+					case "${old_i:-"x"}" in "${i:-"y"}") continue;; *) echo "${www}/game/${i:-"-"}";; esac
+					old_i="${i}"
+				;;
+			esac
+		done
+	;;
+	"4")
+		while read -r i; do
+			case "${i}" in
+				*?'/') continue;;
+				"> "?*)
+					i="${i#"> "}"
+					printf -v 't' -- "${i%"/"*}/"*"/${i##*"/"}"
+					case "${t:-""}" in *'/*/'*) :;; *) continue;; esac
+					echo "${cdn}/downloads/${i:-"-"}"
+				;;
+			esac
+		done
+	;;
+esac
+}
+
+function sync_scan_safify() {
+local "i" "up"
+while read -r i; do
+	while [[ "${i:-""}" =~ '\' ]]; do i="${i//'\'/'/'}"; done
+	case "${i:-".."}" in '..'|'../'*|*'/../'*|*'/..') continue;; esac
+	while [[ "${i:-""}" =~ ['$`\'] ]]; do i="${i//['$`\']}"; done
+	i=$( realpath --canonicalize-existing --physical -- "${i}" 2>/dev/null )
+	case "${i:-""}" in
+		"${PWD}/"?*"/"?*)
+			if [[ -f "${i/#"${PWD}/"}" ]]; then
+				up=1; echo "${i/#"${PWD}/"}"
+			fi
+		;;
+	esac
+done
+case "${up:-"0"}" in 0) return 1;; esac
+}
+
+function minifind() (
+local "i" "old_i" "up" "minifind_cache"
+cd -- "${1:-"/dev/null"}" || return 1
+case "${1:-"/dev/null"}" in
+	"${minifind_cache_path:-$'\r'}") minifind_cache=( "${minifind_cache_old[@]}" );;
+	*)
+		readarray -t "minifind_cache_old" < <(
+			printf -- '%s\n' */ | while read -r i; do
+				printf -v "d" -- '%s\n' "${i}"*
+				case "${d}" in
+					*?"/*") printf -- '%s\n' "${i}/";;
+					*) printf -- '%s' "${d}";;					
+				esac
+			done
+		)
+		minifind_cache=( "${minifind_cache_old[@]}" )
+		minifind_cache_path="${1:-$'\r'}"
+	;;
+esac
+case "${minifind_cache[0]:-""}" in "") return 1;; esac
+case "${2:-"2"}" in
+	1)
+		for i in "${minifind_cache[@]%%"/"*}"; do
+			if [[ -d "${i}" ]]; then up=1; echo "${i}"; fi
+		done
+	;;
+	2)
+		for i in "${minifind_cache[@]}"; do
+			if [[ -f "${i}" ]]; then up=1; echo "${i}"; fi
+		done
+	;;
+	3)
+		for i in "${minifind_cache[@]%%"/"*}"; do
+			case "${old_i:-"/dev/null"}" in "${i}") continue;; esac
+			old_i="${i}"
+			printf -v "i" -- '%s\n' "${i}"*
+			i="${i%%$'\n'*}"
+			if [[ -f "${i}" ]]; then continue; else up=1; echo "${old_i/%'/'}"; fi
+		done
+	;;
+	*) return 1;;
+esac
+case "${up:-"0"}" in 0) return 1;; *) return 0;; esac
+)
+
+function sync_scan() {
+local "off" "tmp" "dirs" "on" "args_old" "argc_old" "s" "i"
+if ! [[ -s "${conf_sfv}" ]]; then ( echo_err "sync" "No offline SFV database found" ); exit 1; fi
+case "${global_root_sfv:-""}" in
+	"")
+		tmp=$( minifind "${PWD}" 1 | grep -m 1 -- '^' )
+		case "${tmp:-""}" in
+			"") case "${opt_sync_list:-"0"}" in 0) ( echo_err "sync" "No game folders found to update" );; esac; exit 0;;
+		esac
+		unset -- "tmp"
+		readarray -t "off" < <( minifind "${PWD}" 2 | grep -Ev -- '\/par2$|\/\.|\.[aA][sS][cC]$|*SUM$|*SUM\.lz$|*SUM\.bz2$|\.[pP][aA][rR]2$|\.[sS][fF][vV]$|\.[sS][iI][gG]$|~$|\/~\$|\.[aA][rR][iI][aA]2$|\.[bB][aA][kK]$|\.[oO][lL][dD]$|\.[pP][aA][rR][tT]$|\.[sS][wW][pP]$|\.[tT][mM][pP]$|\/[dD]esktop.ini$|\/[tT]humbs\.db$' )
+		readarray -t "tmp" < <( minifind "${PWD}" 3 )
+		case "${tmp:-""}" in "") :;; *) off=( "${tmp[@]/%/'/'}" "${off[@]}" );; esac
+		unset -- "tmp"
+		off=( "${off[@]/#"${PWD}/"}" )
+		readarray -t "tmp" < <( echo "${off[@]%%'/'*}" | sort -u )
+		regex=$( printf -- '^%q/.+\n' "${tmp[@]}" )
+		unset -- "tmp"
+		readarray -t "on" < <( echo "${global_sfv:-""}" | grep --extended-regexp --file=<( printf -- '%s\n' "${regex}" ) )
+		unset -- "regex"
+		on=( "${on[@]/"  "????????}" )
+		if [[ -f "bright_memory_infinite/setup_bright_memory_infinite_black_kitten_dlc_1.2_(59596).exe" ]]; then on=( "${on[@]/#"bright_memory_infinite/setup_bright_memory_infinite_black_kitten_1.2_(59596).exe"/"bright_memory_infinite/setup_bright_memory_infinite_black_kitten_dlc_1.2_(59596).exe"}" ); fi
+		if [[ -f "bright_memory_infinite/setup_bright_memory_infinite_skinny_jeans_dlc_1.2_(59596).exe" ]]; then on=( "${on[@]/#"bright_memory_infinite/setup_bright_memory_infinite_skinny_jeans_1.2_(59596).exe"/"bright_memory_infinite/setup_bright_memory_infinite_skinny_jeans_dlc_1.2_(59596).exe"}" ); fi
+		if [[ -f "moonstone_a_hard_days_knight/moonstone_manual.zip" ]] && [[ -f "moonstone_a_hard_days_knight/moonstone_poster_art.zip" ]]; then on=( "${on[@]/#"moonstone_a_hard_days_knight/moonstone_bonus.zip"/"moonstone_a_hard_days_knight/moonstone_manual.zip"$'\n'"moonstone_a_hard_days_knight/moonstone_poster_art.zip"}" ); fi
+		readarray -t "tmp" < <( diff --color=never -- <( echo "${off[@]}" | sort -Vu | process_list_filtration ) <( echo "${on[@]/"  "????????}" | sort -Vu | process_list_filtration ) )
+	;;
+	*)
+		readarray -t "tmp" < <( diff --color=never -- <( echo "${global_root_sfv:-""}" | sort -Vu | process_list_filtration ) <( echo "${global_sfv:-""}" | sort -Vu | process_list_filtration ) )
+	;;
+esac
+case "${tmp[*]:-"><"}" in
+	*" > "?*)
+		case "${opt_sync_list:-"0"}" in
+			2) readarray -t "args" < <( echo "${tmp[@]}" | sync_scan_grep 4 );;
+			*) readarray -t "args" < <( echo "${tmp[@]}" | sync_scan_grep 3 );;
+		esac
+		argc="${#args[@]}"
+		case "${opt_sync_list:-"0"}" in 1|2) echo "${args[@]}"; exit 0;; esac
+		case "${opt_sync_list:-"0"},${global_root_sfv:-"0"}" in
+			3,*) :;;
+			?,0) diff --color=auto --palette='ad=00;38;5;16;48;5;15:de=48;5;15;48;5;16' -- <( echo "${off[@]}" | sort -Vu | process_list_filtration | grep -v -- '/$' ) <( echo "${on[@]/"  "????????}" | sort -Vu | process_list_filtration | grep -v -- '/$' ); printf -- '\n';;
+			?,*) diff --color=auto --palette='ad=00;38;5;16;48;5;15:de=48;5;15;48;5;16' -- <( echo "${global_root_sfv:-""}" | sort -Vu | process_list_filtration | grep -v -- '/$' ) <( echo "${global_sfv:-""}" | sort -Vu | process_list_filtration | grep -v -- '/$' ); printf -- '\n';;
+		esac 1>&2
+		case "${opt_clean_up:-"0"}" in
+			1)
+				case "${global_root_sfv:-""}" in "") :;; *) tmp=( "${tmp[@]/%"  "????????}" );; esac
+				readarray -t "args_old" < <( echo "${tmp[@]}" | sync_scan_grep 1 | sync_scan_safify )
+				case "${args_old[0]:-""}" in "") args_old=();; esac
+				argc_old="${#args_old[@]}"
+				case "${argc_old:-"0"}" in
+					0) case "${opt_sync_list:-"0"}" in 3) exit 0;; esac;;
+					*)
+						case "${opt_sync_list:-"0"}" in
+							0)
+								if [[ -f "${args_old[0]}" ]]; then
+									case "${argc_old}" in '1'|'-1') s="";; *) s="s";; esac
+									if ! read -p "Are you sure to delete ${argc_old} old \"<\" file${s}? (y/N) " -r "i" 1>&2; then exit 1; fi
+									case "${i:-""}" in
+										[nN][oO]|[nN]) :;;
+										[yY][eE][sS]|[yY])
+											if rm -- "${args_old[@]}"; then
+												( echo_err "sync-clean" "OK" )
+											else
+												( echo_err "sync-clean" "FAILED" ); exit 1
+											fi
+										;;
+										*) exit 1;;
+									esac
+									unset -- "s"
+								fi
+							;;
+							*) echo "${args_old[@]/#"${cdn}/downloads/"}"; exit 0;;
+						esac
+					;;
+				esac
+			;;
+		esac
+		case "${opt_sync_list:-"0"}" in 0) :;; *) exit 0;; esac
+		case "${argc}" in '1'|'-1') s="";; *) s="s";; esac
+		if ! read -p "Are you sure to update ${argc} new \">\" product${s}? (y/N) " -r "i" 1>&2; then exit 1; fi
+		case "${i:-""}" in
+			[yY][eE][sS]|[yY]) :;;
+			*) exit 1;;
+		esac
+	;;
+	"><"|*" < "*?)
+		( echo_err "sync" "Everything is up-to-date" ); exit 0
+	;;
+esac
+case "${opt_sync_list:-"0"}" in 0) :;; *) exit 0;; esac
+}
+
+function load_the_sfv_map() {
+local "t"
+if is_file "${OPTARG:-""}"; then
+	t=$( file --brief --mime-type --dereference -- "${OPTARG}" )
+	case "${t}" in "text/"?*) :;;  "inode/x-empty") echo_err "${OPTARG:-"''"}" "Is an empty file"; exit 1;; *) echo_err "${OPTARG:-"''"}" "Is not a text file"; exit 1;; esac
+	if grep -EIm 1 -- '^.+[\/].+  [0-9a-f]{8}$' "${OPTARG}" &>/dev/null; then
+		global_root_sfv=$( grep -E -- '.+[\/].+  [0-9a-f]{8}$' "${OPTARG}" )
+		case "${global_root_sfv:-""}" in "") echo_err "${OPTARG:-"''"}" "No checksum lines found"; exit 1;; esac
+	elif grep -EIm 1 -- '^.+ +[0-9a-f]+$' "${OPTARG}" &>/dev/null; then
+		echo_err "${OPTARG:-"''"}" "Is not a GG SFV file"; exit 1
+	else
+		echo_err "${OPTARG:-"''"}" "No checksum lines found"; exit 1
+	fi
+else
+	exit 1
+fi
+}
+
+function chk_auth_only() { opt_chk_auth=1; mkconf; authset; sslchk; if ! logchk; then exit 1; fi; }
+
 function main() {
-local "name" "gg_name" "gg_i" "gg_p" "gg_g" "www" "cdn" "conf_dir" "conf" "conf_aria2" "agent" "conf_sfv" "LANG" "LC_ALL" "OPTERR" "OPTIND" "OPT" "OPTARG" "opt_www" "opt_slug" "global_sfv" "arg" "code"
-LANG=C
-LC_ALL=C
-export "LANG" "LC_ALL"
+local "name" "gg_name" "gg_i" "gg_p" "gg_g" "www" "cdn" "conf_dir" "conf" "conf_aria2" "agent" "conf_sfv" "OPTERR" "OPTIND" "OPT" "OPTARG" "opt_www" "opt_slug" "global_sfv" "global_root_sfv" "arg" "code"
 OPTERR=0
 OPTIND=1
 name="${0##*"/"}"
@@ -1123,8 +1543,9 @@ cdn="https://cdn.${www#*"//"}"
 conf_dir="${HOME}/.local/share/ggcdn"
 conf="${conf_dir}/id_gg"
 conf_aria2="${conf_dir}/aria2.conf"
-agent='GOG-Downloader (InDev)'
-sfv_base="https://web.archive.org/web/20220827203612_if/https://codeload.github.com/GOG-Games-com/GOG.com-Game-Collection-Verification/tar.gz/refs/heads/main"
+agent='GOG-Downloader-Lin/2022-12-03'
+git="GOG-Games-com/GOG.com-Game-Collection-Verification"
+sfv_base="https://web.archive.org/web/20220827203612_if/https://codeload.github.com/${git}/tar.gz/refs/heads/main"
 sfv_base_sha="b62a0dd74dfaf5a073a0cd279200dc4b1d4fc80e4ed8a9700ea1bd8aa9251ec1"
 conf_sfv="${conf_dir}/sfv.tgz"
 always_include=" patch_biomutant_1.3_(49718)_to_1.4_(51251).exe
@@ -1143,32 +1564,82 @@ always_include=" patch_biomutant_1.3_(49718)_to_1.4_(51251).exe
  patch_slop_episode3_2.0.1.2.exe
  patch_the_guild2_pirates_2.0.1.5.exe
  patch_the_witcher_3_wild_hunt_-_game_of_the_year_edition_1.31_(A)_to_1.32.exe "
-pkgchk "curl" # "python3" "nslookup" "aria2c" "7z" "gzip" "tar" "xattr"
-while getopts ":-:p:u:w:acnlLh" "OPT"; do
+pkgchk "curl" "diff" "grep" # "python3" "nslookup" "aria2c" "7z" "gzip" "tar" "xattr" "unzip"
+while getopts ":-:p:u:w:acnlLskfd:g:G:S:F:h" "OPT"; do
 	case "${OPT}" in
 		-)
 			case "${OPTARG}" in
-				donate) show_donate;;
-				a|auth|authentification) opt_chk_auth=1;;
+				donate|donate:true|donate=true) show_donate;;
+				donate:false|donate=false) :;;
+				a|auth|auth:true|auth=true|authentification|authentification:true|authentification=true) opt_chk_auth_only=1;;
 				c|clip|clip-gui|gui-clip|clipboard) opt_clip=1;;
-				n|no-dir|no-directory|no-folder) opt_no_dir=1;;
-				sfv) opt_sfv=1;;
-				reset) auth_zero;;
-				l|list|latest|list-latest|latest-list) print_latest_fetch;;
-				L|List|Latest|List-[lL]atest|Latest-[lL]ist) opt_slug=1; print_latest_fetch;;
-				unsafe) opt_crc=0;;
-				h|help) show_help;;
+				n|no-dir|no-dir:true|no-dir=true|no-directory|no-directory:true|no-directory=true|no-folder|no-folder:true|no-folder=true) opt_no_dir=1;;
+				no-dir:false|no-dir=false|no-directory:false|no-directory=false|no-folder:false|no-folder=false) unset -- "opt_no_dir";;
+				reset|reset:true|reset=true) auth_zero;;
+				reset:false|reset=false) :;;
+				l|list|latest|list-latest|latest-list) opt_print_latest=1;;
+				L|List|Latest|List-[lL]atest|Latest-[lL]ist) opt_slug=1; opt_print_latest=1;;
+				sfv|sfv:true|sfv=true) opt_sfv=1;;
+				no-sfv|sfv:false|sfv=false) opt_sfv=0;;
+				unsafe|unsafe:true|unsafe=true) opt_crc=0;;
+				unsafe:false|unsafe=false) unset -- "opt_crc";;
+				goodie|goodie:true|goodie=true|goodies|goodies:true|goodies=true|extra|extra:true|extra=true|bonus|bonus:true|bonus=true) opt_goodie=1;;
+				nx|no-goodie|goodie:false|goodie=false|no-goodies|goodies:false|goodies=false|no-extra|extra:false|extra=false|no-bonus|bonus:false|bonus=false) opt_goodie=0;;
+				patch|patch:true|patch=true|patches|patches:true|patches=true) :;;
+				np|no-patch|patch:false|patch=false|no-patches|patches:false|patches=false) :;;
+				game|game:true|game=true|games|games:true|games=true|setup|setup:true|setup=true|setups|setups:true|setups=true|installer|installer:true|installer=true|installers|installers:true|installers=true) opt_game=1;;
+				ns|no-game|game:false|game=false|no-games|games:false|games=false|no-setup|setup:false|setup=false|no-setups|setups:false|setups=false|no-installer|installer:false|installer=false|no-installers|installers:false|installers=false) opt_game=0;;
+				s|sync|sync:true|sync=true|scan|scan:true|scan=true) opt_sync=1;;
+				lsync|lsync:true|lsync=true|lscan|lscan:true|lscan=true) opt_sync=1; opt_sync_list=1;;
+				Lsync|Lsync:true|Lsync=true|Lscan|Lscan:true|Lscan=true) opt_sync=1; opt_sync_list=2;;
+				Lclean|Lclean:true|Lclean=true) opt_sync=1; opt_clean_up=1; opt_sync_list=3;;
+				no-sync|sync:false|sync=false|no-scan|scan:false|scan=false) unset -- "opt_sync";;
+				clean|clean:true|clean=true) opt_clean_up=1;;
+				no-clean|clean:false|clean=false) unset -- "opt_clean_up";;
+				sync-clean|sync-clean:true|sync-clean=true|scan-clean|scan-clean:true|scan-clean=true|clean-sync|clean-sync:true|clean-sync=true|scan-clean|scan-clean:true|scan-clean=true) opt_sync=1; opt_clean_up=1;;
+				no-sync-clean|sync-clean:false|sync-clean=false|no-scan-clean|scan-clean:false|scan-clean=false|no-clean-sync|clean-sync:false|clean-sync=false|no-scan-clean|scan-clean:false|scan-clean=false) unset -- "opt_sync" "opt_clean_up";;
+				f|fresh|fresh:true|fresh=true|no-keep|keep:false|keep=false) opt_refresh=1;;
+				k|keep|keep:true|keep=true|no-fresh|fresh:false|fresh=false) unset -- "opt_refresh";;
+				h|help|help:true|help=true) show_help;;
+				help:false|help=false) :;;
+				version|version:true|version=true) print_ver; exit 0;;
+				version:false|version=false) :;;
 				*) show_help 1 1>&2;;
 			esac
 		;;
 		u) set_auth_opt;;
 		p) set_auth_opt;;
 		w) set_www_opt;;
-		a) opt_chk_auth=1;;
+		a) opt_chk_auth_only=1;;
 		c) opt_clip=1;;
 		n) opt_no_dir=1;;
-		l) print_latest_fetch;;
-		L) opt_slug=1; print_latest_fetch;;
+		l) opt_print_latest=1;;
+		L) opt_slug=1; opt_print_latest=1;;
+		s) opt_sync=1;;
+		k) unset -- "opt_refresh";;
+		f) opt_refresh=1;;
+		d) load_the_sfv_map;;
+		S)
+			opt_sync=1
+			opt_refresh=1
+			load_the_sfv_map
+			opt_clean_up=1
+		;;
+		g)
+			opt_sync=1
+			opt_sync_list=1
+			load_the_sfv_map
+		;;
+		G)
+			opt_sync=1
+			opt_sync_list=2
+			load_the_sfv_map
+		;;
+		F)
+			opt_sync=1
+			opt_sync_list=3
+			load_the_sfv_map
+		;;
 		h) show_help;;
 		*) show_help 1 1>&2;;
 	esac
@@ -1181,18 +1652,36 @@ case "${0##*"/"}" in
 	crc32) process_crc_main "${@}"; exit 1;;
 	crc64) mode=64; process_crc_main "${@}"; exit 1;;
 esac
-mkconf
-sfvchk
-case "${opt_sfv:-"0"}" in
-	1) if ! sfvget; then exit 1; fi;;
+case "${opt_crc:-"0"},${opt_refresh:-"0"}" in
+	0,1) echo_err "incompatible options" "--fresh, --unsafe"; exit 1;;
 esac
+case "${opt_sync:-"0"},${opt_no_dir:-"0"}" in
+	1,1) echo_err "incompatible options" "--sync, --no-dir"; exit 1;;
+esac
+case "${opt_crc:-"0"},${opt_sync:-"0"}" in
+	0,1) echo_err "incompatible options" "--sync, --unsafe"; exit 1;;
+esac
+case "${opt_game:-""}${opt_goodie:-""}" in
+	"") opt_game=1; opt_goodie=1;; 00) exit 0;;
+esac
+case "${opt_print_latest:-"0"}" in 1) print_latest;; esac
+mkconf
+case "${opt_chk_auth_only:-"0"}" in 1) chk_auth_only;; esac
 args=( "${@}" )
 argc="${#}"
 set_clipboard
+case "${argc},${opt_sync:-"0"}" in 0,0) exit 0;; esac
+sfvchk
+case "${opt_sync:-"0"},${opt_sfv:-"1"}" in
+	1,1) if ! sfvget; then exit 1; fi;;
+	*) case "${opt_sfv:-"0"}" in 1) if ! sfvget; then exit 1; fi;; esac;;
+esac
 unset -- "sfv_base" "sfv_base_sha"
-case "${opt_chk_auth:-"0"},${argc}" in 0,0) exit 0;; 0,*) sfv_to_ram;; esac
+case "${opt_chk_auth:-"0"},${opt_sync:-"0"},${argc}" in 0,0,0) exit 0;; 0,?,*) sfv_to_ram;; esac
 authset; sslchk
 if ! logchk; then exit 1; fi
+case "${opt_sync:-"0"},${argc}" in 1,*) sync_scan;; ?,0) :;; esac
+unset -- "global_root_sfv"
 for arg in "${args[@]}"; do
 	rmslash_arg
 	if is_gg "${arg}"; then
@@ -1202,6 +1691,14 @@ for arg in "${args[@]}"; do
 		code=1
 	fi
 done
+case "${opt_sync:-"0"}" in
+	1)
+		case "${code:-"0"}" in
+			0) ( echo_err "sync" "OK" );;
+			*) ( echo_err "sync" "FAILED" );;
+		esac
+	;;
+esac
 exit "${code:-"0"}"
 }
 
