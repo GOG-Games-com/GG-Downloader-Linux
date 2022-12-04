@@ -558,6 +558,8 @@ if type "python3" &>/dev/null; then
 fi
 if type "7z" "tar" &>/dev/null; then
 	opt_crc=1
+else
+	opt_crc_not_found=1
 fi
 if type "setfattr" &>/dev/null; then
 	opt_xattr=1
@@ -676,25 +678,31 @@ To access, a \"${cdn#*"//"}\" username/password is required.
   -a, --auth     check authentification and exit
   -c, --clip-gui open the window to enter URLs/SLUGs/IDs to download
 
-      --setup    download installers of a product (default)
-      --no-setup do not download installers of a product
-      --extra    download goodies of a product (default)
-      --no-extra do not download goodies of a product
-  -k, --keep     always keep (don't delete) the old files (default)
-  -f, --fresh    delete the old files when checksums are different
-  -n, --no-dir   do not put files in a slug subdirectory
-      --unsafe   do not verify integrity of downloads
+      --setup    download setup/patch EXE/BIN installers of a game from its SFV,
+                 ignoring game page files from its Patch/Other URLs (default)
+      --no-setup do not download the mentioned installers of a game
+      --extra    download goodies of a game, all the other files from its SFV,
+                 ignoring game page files from its Patch/Other URLs (default)
+      --no-extra do not download the mentioned goodies of a game
+  -k, --keep     always keep (don't delete) currently CDN-listed files (default)
+  -f, --fresh    autodelete/redownload currently CDN-listed files when necessary
+  -n, --no-dir   do not put files in a slug subdir (default on Patch/Other URLs)
+      --unsafe   do not verify download integrity (default on Patch/Other URLs)
 
-  -s, --sync     update the products in slug subdirectories and exit
-      --clean    when a sync, delete foreign non-sync files
-  -d [SFV]       when a sync, compare the newer data against the SFV
+  -s, --sync     scan your current directory for known slug-name subdirectories,
+                 update the data and exit (ignoring any passed [URL/SLUG/ID]...)
+      --clean    only when a sync, delete foreign non-sync data in the subdirs
+  -d [SFV]       only when a sync, compare the CDN's filelist against the SFV's
 
-  -l, --latest   list added/updated on ${gg_name} CDN and exit
+  -l, --latest   list dates/titles of added/updated on ${gg_name} CDN and exit
   -L, --Latest   list slugs of added/updated on ${gg_name} CDN and exit
-      --lsync    list slug links for a sync and exit
-      --Lsync    list ${gg_name} CDN links for a sync and exit
-      --Lclean   list foreign non-sync files and exit
-      --sfv      update the offline SFV database (default on sync)
+      --lsync    scan your current directory for known slug-name subdirectories,
+                 list slug links for a sync and exit (ignoring [URL/SLUG/ID]...)
+      --Lsync    scan your current directory for known slug-name subdirectories,
+                 list file links for a sync and exit (ignoring [URL/SLUG/ID]...)
+      --Lclean   scan your current directory for known slug-name subdirectories,
+                 list foreign non-sync data and exit (ignoring [URL/SLUG/ID]...)
+      --sfv      update the offline SFV database (default on --sync)
       --no-sfv   do not update the offline SFV database
 
   -S [SFV]       a shortcut for --sync, --fresh, -d [SFV], --clean
@@ -874,9 +882,9 @@ esac
 case "${local_sfv:-""}" in
 	"")
 		if process_act_is_in_queue; then
-			echo_err "${1##*"/"}" "Updating game files"
+			echo_err "${1##*"/"}" "${gg_name} CDN is updating game files"
 		else
-			echo_err "${1##*"/"}" "No game files found"
+			echo_err "${1##*"/"}" "No game files found on ${gg_name} CDN"
 		fi
 		echo "${1##*"/"}: FAILED"
 		return 1
@@ -892,9 +900,9 @@ case "${local_sfv:-""}" in
 		case "${opt_game:-"1"}" in
 			1)
 				if process_act_is_in_queue; then
-					echo_err "${1##*"/"}" "Updating game files"
+					echo_err "${1##*"/"}" "${gg_name} CDN is updating game files"
 				else
-					echo_err "${1##*"/"}" "No game setup found"
+					echo_err "${1##*"/"}" "No game setup found on ${gg_name} CDN"
 				fi
 				echo "${1##*"/"}: FAILED"
 				return 1
@@ -941,7 +949,7 @@ echo "${1:-"-"}  ${i}"
 function process_crc_main() {
 case "${opt_crc:-"0"}" in
 	0)
-		printf -- '%s\n' "${name}: please install: 7z" 1>&2
+		printf -- '%s\n' "${name}: please install: 7z tar" 1>&2
 		exit 1
 	;;
 esac
@@ -1496,7 +1504,7 @@ case "${tmp[*]:-"><"}" in
 		esac
 		case "${opt_sync_list:-"0"}" in 0) :;; *) exit 0;; esac
 		case "${argc}" in '1'|'-1') s="";; *) s="s";; esac
-		if ! read -p "Are you sure to update ${argc} new \">\" product${s}? (y/N) " -r "i" 1>&2; then exit 1; fi
+		if ! read -p "Are you sure to update ${argc} new \">\" game${s}? (y/N) " -r "i" 1>&2; then exit 1; fi
 		case "${i:-""}" in
 			[yY][eE][sS]|[yY]) :;;
 			*) exit 1;;
@@ -1543,7 +1551,7 @@ cdn="https://cdn.${www#*"//"}"
 conf_dir="${HOME}/.local/share/ggcdn"
 conf="${conf_dir}/id_gg"
 conf_aria2="${conf_dir}/aria2.conf"
-agent='GOG-Downloader-Lin/2022-12-03'
+agent='GOG-Downloader-Lin/2022-12-04'
 git="GOG-Games-com/GOG.com-Game-Collection-Verification"
 sfv_base="https://web.archive.org/web/20220827203612_if/https://codeload.github.com/${git}/tar.gz/refs/heads/main"
 sfv_base_sha="b62a0dd74dfaf5a073a0cd279200dc4b1d4fc80e4ed8a9700ea1bd8aa9251ec1"
@@ -1652,14 +1660,16 @@ case "${0##*"/"}" in
 	crc32) process_crc_main "${@}"; exit 1;;
 	crc64) mode=64; process_crc_main "${@}"; exit 1;;
 esac
-case "${opt_crc:-"0"},${opt_refresh:-"0"}" in
-	0,1) echo_err "incompatible options" "--fresh, --unsafe"; exit 1;;
+case "${opt_crc:-"0"},${opt_refresh:-"0"},${opt_crc_not_found:-"0"}" in
+	0,1,0) echo_err "incompatible options" "--fresh, --unsafe"; exit 1;;
+	0,1,1) printf -- '%s\n' "${name}: please install: 7z tar" 1>&2; exit 1;;
 esac
 case "${opt_sync:-"0"},${opt_no_dir:-"0"}" in
 	1,1) echo_err "incompatible options" "--sync, --no-dir"; exit 1;;
 esac
-case "${opt_crc:-"0"},${opt_sync:-"0"}" in
-	0,1) echo_err "incompatible options" "--sync, --unsafe"; exit 1;;
+case "${opt_crc:-"0"},${opt_sync:-"0"},${opt_crc_not_found:-"0"}" in
+	0,1,0) echo_err "incompatible options" "--sync, --unsafe"; exit 1;;
+	0,1,1) printf -- '%s\n' "${name}: please install: 7z tar" 1>&2; exit 1;;
 esac
 case "${opt_game:-""}${opt_goodie:-""}" in
 	"") opt_game=1; opt_goodie=1;; 00) exit 0;;
@@ -1704,4 +1714,4 @@ exit "${code:-"0"}"
 
 main "${@}"
 exit 1
-}
+} 
