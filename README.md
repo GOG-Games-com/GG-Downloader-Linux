@@ -30,43 +30,43 @@ gg-downloader [OPTION]... [URL/SLUG/ID]...
 
 **File Options**
 
-***--setup*** download installers of a product (default)
+***--setup*** download setup/patch EXE/BIN installers of a game from its SFV, ignoring game page files from its Patch/Other URLs (default)
 
-***--no-setup*** do not download installers of a product
+***--no-setup*** do not download the mentioned installers of a game
 
-***--extra*** download goodies of a product (default)
+***--extra*** download goodies of a game, all the other files from its SFV, ignoring game page files from its Patch/Other URLs (default)
 
-***--no-extra*** do not download goodies of a product
+***--no-extra*** do not download the mentioned goodies of a game
 
-***-k, --keep*** always keep (don't delete) the old files (default)
+***-k, --keep*** always keep (don't delete) currently CDN-listed files (default)
 
-***-f, --fresh*** delete the old files when checksums are different
+***-f, --fresh*** autodelete/redownload currently CDN-listed files when necessary
 
-***-n, --no-dir*** do not put files in a slug subdirectory
+***-n, --no-dir*** do not put files in a slug subdir (default on Patch/Other URLs)
 
-***--unsafe*** do not verify integrity of downloads
+***--unsafe*** do not verify download integrity (default on Patch/Other URLs)
 
 **Sync Options**
 
-***-s, --sync*** update the products in slug subdirectories and exit
+***-s, --sync*** scan your current directory for known slug-name subdirectories, update the data and exit (ignoring any passed [URL/SLUG/ID]...)
 
-***--clean*** delete foreign non-sync files, then do a sync and exit
+***--clean*** only when a sync, delete foreign non-sync files in the subdirs
 
-***-d [SFV]*** when a sync, compare the newer data against the SFV
+***-d [SFV]*** only when a sync, compare the CDN's filelist against the SFV's
 
 **Misc Options**
 
-***-l, --latest*** list added/updated on GOG Games CDN
+***-l, --latest*** list dates/titles of added/updated on GOG Games CDN and exit
 
-***-L, --Latest*** list slugs of added/updated on GOG Games CDN
+***-L, --Latest*** list slugs of added/updated on GOG Games CDN and exit
 
-***--lsync*** list slug links for a sync and exit
+***--lsync*** scan your current directory for known slug-name subdirectories, list slug links for a sync and exit (ignoring [URL/SLUG/ID]...)
 
-***--Lsync*** list GOG Games CDN links for a sync and exit
+***--Lsync*** scan your current directory for known slug-name subdirectories, list file links for a sync and exit (ignoring [URL/SLUG/ID]...)
 
-***--Lclean*** list foreign non-sync files and exit
+***--Lclean*** scan your current directory for known slug-name subdirectories, list foreign non-sync data and exit (ignoring [URL/SLUG/ID]...)
 
-***--sfv*** update the offline SFV database (default on sync)
+***--sfv*** update the offline SFV database (default on --sync)
 
 ***--no-sfv*** do not update the offline SFV database
 
