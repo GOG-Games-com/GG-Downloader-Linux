@@ -389,7 +389,7 @@ case "${file}" in
 	;;
 esac
 case "${1}" in
-	"${cdn}/downloads/moonstone_a_hard_days_knight/moonstone_bonus.zip")
+	"moonstone_a_hard_days_knight/moonstone_bonus.zip")
 		if [[ -s "${cdnget_path:-""}moonstone_manual.zip" ]] && [[ -s "${cdnget_path:-""}moonstone_poster_art.zip" ]]; then
 			return 0
 		fi
@@ -1551,7 +1551,7 @@ cdn="https://cdn.${www#*"//"}"
 conf_dir="${HOME}/.local/share/ggcdn"
 conf="${conf_dir}/id_gg"
 conf_aria2="${conf_dir}/aria2.conf"
-agent='GOG-Downloader-Lin/2022-12-04'
+agent='GOG-Downloader-Lin/2022-12-12'
 git="GOG-Games-com/GOG.com-Game-Collection-Verification"
 sfv_base="https://web.archive.org/web/20220827203612_if/https://codeload.github.com/${git}/tar.gz/refs/heads/main"
 sfv_base_sha="b62a0dd74dfaf5a073a0cd279200dc4b1d4fc80e4ed8a9700ea1bd8aa9251ec1"
