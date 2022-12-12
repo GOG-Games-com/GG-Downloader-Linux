@@ -74,9 +74,9 @@ gg-downloader [OPTION]... [URL/SLUG/ID]...
 
 ***-S [SFV]*** a shortcut for *--sync, --fresh, -d [SFV], --clean*
 
-***-G [SFV]*** a shortcut for *--lsync, -d [SFV]*
+***-g [SFV]*** a shortcut for *--lsync, -d [SFV]*
 
-***-S [SFV]*** a shortcut for *--Lsync, -d [SFV]*
+***-G [SFV]*** a shortcut for *--Lsync, -d [SFV]*
 
 ***-F [SFV]*** a shortcut for *--Lclean, -d [SFV]*
 
